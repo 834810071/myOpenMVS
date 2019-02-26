@@ -70,29 +70,33 @@ bool Scene::LoadInterface(const String & fileName)
 
 	// import platforms and cameras
 	ASSERT(!obj.platforms.empty());
-	platforms.Reserve((uint32_t)obj.platforms.size());
+	platforms.Reserve((uint32_t)obj.platforms.size());  // 申请空间
+	// 遍历平台 将接口(Interface类)中的平台添加到场景(Scene类)中
 	for (Interface::PlatformArr::const_iterator itPlatform=obj.platforms.begin(); itPlatform!=obj.platforms.end(); ++itPlatform) {
-		Platform& platform = platforms.AddEmpty();
+		Platform& platform = platforms.AddEmpty();  // 先新建一个空的
 		platform.name = itPlatform->name;
-		platform.cameras.Reserve((uint32_t)itPlatform->cameras.size());
+		platform.cameras.Reserve((uint32_t)itPlatform->cameras.size());	// 平台中的相机申请内存
+		// 便利该平台中的相机
 		for (Interface::Platform::CameraArr::const_iterator itCamera=itPlatform->cameras.begin(); itCamera!=itPlatform->cameras.end(); ++itCamera) {
 			Platform::Camera& camera = platform.cameras.AddEmpty();
 			camera.K = itCamera->K;
 			camera.R = itCamera->R;
 			camera.C = itCamera->C;
 			if (!itCamera->IsNormalized()) {
-				// normalize K
+				// normalize K 归一化相机内矩阵K
 				ASSERT(itCamera->HasResolution());
-				const REAL scale(REAL(1)/camera.GetNormalizationScale(itCamera->width,itCamera->height));
+				const REAL scale(REAL(1)/camera.GetNormalizationScale(itCamera->width,itCamera->height));	// 1 / max（width, height）
 				camera.K(0,0) *= scale;
 				camera.K(1,1) *= scale;
 				camera.K(0,2) *= scale;
 				camera.K(1,2) *= scale;
 			}
-			DEBUG_EXTRA("Camera model loaded: platform %u; camera %2u; f %.3fx%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
+			//DEBUG_EXTRA("Camera model loaded: platform %u; camera %2u; f %.3fx%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
+			DEBUG_EXTRA("相机模型加载数量: platform %u; camera %2u; f(焦距) %.3f x(偏移量)%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
+
 		}
-		ASSERT(platform.cameras.GetSize() == itPlatform->cameras.size());
-		platform.poses.Reserve((uint32_t)itPlatform->poses.size());
+		ASSERT(platform.cameras.GetSize() == itPlatform->cameras.size());	// 确保相机全部添加进去
+		platform.poses.Reserve((uint32_t)itPlatform->poses.size());	// 该平台位姿申请空间
 		for (Interface::Platform::PoseArr::const_iterator itPose=itPlatform->poses.begin(); itPose!=itPlatform->poses.end(); ++itPose) {
 			Platform::Pose& pose = platform.poses.AddEmpty();
 			pose.R = itPose->R;
@@ -104,20 +108,28 @@ bool Scene::LoadInterface(const String & fileName)
 	if (platforms.IsEmpty())
 		return false;
 
-	// import images
-	nCalibratedImages = 0;
-	size_t nTotalPixels(0);
-	ASSERT(!obj.images.empty());
+	// import images 导入图像
+	nCalibratedImages = 0;	// 多少个标定图像
+	size_t nTotalPixels(0);	// 总共像素
+	ASSERT(!obj.images.empty());	// 保证图像非空
 	images.Reserve((uint32_t)obj.images.size());
+	// 遍历图像  image {
+	// 				std::string name; // image file name
+	//				uint32_t platformID; // ID of the associated platform
+	//				uint32_t cameraID; // ID of the associated camera on the associated platform
+	//				uint32_t poseID; // ID of the pose of the associated platform
+	//				uint32_t ID; // ID of this image in the global space (optional)
+	//			}
+	// 将接口中的image复制到namespace MVS Image类中
 	for (Interface::ImageArr::const_iterator it=obj.images.begin(); it!=obj.images.end(); ++it) {
 		const Interface::Image& image = *it;
 		const uint32_t ID(images.GetSize());
-		Image& imageData = images.AddEmpty();
+		Image& imageData = images.AddEmpty();	// 申请空间
 		imageData.name = image.name;
-		Util::ensureUnifySlash(imageData.name);
-		imageData.name = MAKE_PATH_FULL(WORKING_FOLDER_FULL, imageData.name);
+		Util::ensureUnifySlash(imageData.name);	// 确保图片名字使用统一斜杠
+		imageData.name = MAKE_PATH_FULL(WORKING_FOLDER_FULL, imageData.name);	// 将给定路径添加到给定文件名  WORKING_FOLDER_FULL 当前文件夹的完整路径
 		imageData.poseID = image.poseID;
-		if (imageData.poseID == NO_ID) {
+		if (imageData.poseID == NO_ID) {	// 表明未校准
 			DEBUG_EXTRA("warning: uncalibrated image '%s'", image.name.c_str());
 			continue;
 		}
@@ -126,7 +138,7 @@ bool Scene::LoadInterface(const String & fileName)
 		// init camera
 		const Interface::Platform::Camera& camera = obj.platforms[image.platformID].cameras[image.cameraID];
 		if (camera.HasResolution()) {
-			// use stored resolution
+			// use stored resolution	使用存储的像素
 			imageData.width = camera.width;
 			imageData.height = camera.height;
 			imageData.scale = 1;

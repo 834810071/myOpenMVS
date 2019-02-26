@@ -84,6 +84,7 @@ bool Initialize(size_t argc, LPCTSTR* argv)
 		;
 
 	// group of options allowed both on command line and in config file
+	// 命令行和配置文件中都允许的一组选项
 	unsigned nResolutionLevel;
 	unsigned nMinResolution;
 	unsigned nNumViews;

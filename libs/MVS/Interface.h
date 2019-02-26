@@ -154,6 +154,7 @@ public:
 namespace _INTERFACE_NAMESPACE {
 
 // custom serialization
+// 自定义序列化  存档
 namespace ARCHIVE {
 
 // Basic serialization types
@@ -176,7 +177,7 @@ struct ArchiveLoad {
 
 template<typename _Tp>
 bool Save(ArchiveSave& a, const _Tp& obj) {
-	const_cast<_Tp&>(obj).serialize(a, a.version);
+	const_cast<_Tp&>(obj).serialize(a, a.version);	// TODO
 	return true;
 }
 template<typename _Tp>
@@ -199,14 +200,14 @@ ArchiveLoad& ArchiveLoad::operator & (_Tp& obj) {
 // Main exporter & importer
 template<typename _Tp>
 bool SerializeSave(const _Tp& obj, const std::string& fileName, uint32_t version=MVSI_PROJECT_VER) {
-	// open the output stream
+	// open the output stream	打开输出流
 	std::ofstream stream(fileName, std::ofstream::binary);
 	if (!stream.is_open())
 		return false;
 	// write header
 	if (version > 0) {
 		// save project ID
-		stream.write(MVSI_PROJECT_ID, 4);
+		stream.write(MVSI_PROJECT_ID, 4);	// "MVSI"
 		// save project version
 		stream.write((const char*)&version, sizeof(uint32_t));
 		// reserve some bytes
@@ -220,27 +221,28 @@ bool SerializeSave(const _Tp& obj, const std::string& fileName, uint32_t version
 }
 template<typename _Tp>
 bool SerializeLoad(_Tp& obj, const std::string& fileName, uint32_t* pVersion=NULL) {
-	// open the input stream
+	// open the input stream	打开输入流
 	std::ifstream stream(fileName, std::ifstream::binary);
 	if (!stream.is_open())
 		return false;
-	// read header
+	// read header		project ID & project version
 	uint32_t version(0);
 	// load project header ID
 	char szHeader[4];
-	stream.read(szHeader, 4);
+	stream.read(szHeader, 4);	// "MVSI"
 	if (!stream)
 		return false;
-	if (strncmp(szHeader, MVSI_PROJECT_ID, 4) != 0) {
+	if (strncmp(szHeader, MVSI_PROJECT_ID, 4) != 0) {	// 如果工程ID不一致
 		// try to load as the first version that didn't have a header
+		// 尝试加载没有标头的第一个版本
 		const size_t size(fileName.size());
 		if (size <= 4)
 			return false;
-		std::string ext(fileName.substr(size-4));
-		std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });
+		std::string ext(fileName.substr(size-4));	// 获得后缀名
+		std::transform(ext.begin(), ext.end(), ext.begin(), [](char c) { return (char)std::tolower(c); });	// 后缀名变小写
 		if (ext != ".mvs")
 			return false;
-		stream.seekg(0, std::ifstream::beg);
+		stream.seekg(0, std::ifstream::beg);	// 设置输入文件流的文件流指针位置 	std::ifstream::beg  起始位置，位于第一个字符，即索引0处
 	} else {
 		// load project version
 		stream.read((char*)&version, sizeof(uint32_t));
@@ -279,7 +281,7 @@ ARCHIVE_DEFINE_TYPE(double)
 
 // Serialization support for cv::Matx
 template<typename _Tp, int m, int n>
-bool Save(ArchiveSave& a, const cv::Matx<_Tp,m,n>& _m) {
+bool Save(ArchiveSave& a, const cv::Matx<_Tp,m,n>& _m) {	// 类型 行 列
 	a.stream.write((const char*)_m.val, sizeof(_Tp)*m*n);
 	return true;
 }
@@ -305,7 +307,7 @@ bool Load(ArchiveLoad& a, cv::Point3_<_Tp>& pt) {
 template<>
 bool Save<std::string>(ArchiveSave& a, const std::string& s) {
 	const uint64_t size(s.size());
-	Save(a, size);
+	Save(a, size);	// 调用	a.stream.write((const char*)&v, sizeof(TYPE));  TODO
 	if (size > 0)
 		a.stream.write(&s[0], sizeof(char)*size);
 	return true;
@@ -359,6 +361,7 @@ struct Interface
 	/*----------------------------------------------------------------*/
 
 	// structure describing a mobile platform with cameras attached to it
+	// 结构描述了一个带有附加到它的相机的移动平台
 	struct Platform {
 		// structure describing a camera mounted on a platform
 		struct Camera {
@@ -366,11 +369,12 @@ struct Interface
 			uint32_t width, height; // image resolution in pixels for all images sharing this camera (optional)
 			Mat33d K; // camera's intrinsics matrix (normalized if image resolution not specified)
 			Mat33d R; // camera's rotation matrix relative to the platform
+			// 摄像机相对于平台的平移矢量
 			Pos3d C; // camera's translation vector relative to the platform
 
 			Camera() : width(0), height(0) {}
 			bool HasResolution() const { return width > 0 && height > 0; }
-			bool IsNormalized() const { return !HasResolution(); }
+			bool IsNormalized() const { return !HasResolution(); }	// 是否归一化  如果大于0 返回false
 
 			template <class Archive>
 			void serialize(Archive& ar, const unsigned int version) {
@@ -387,9 +391,10 @@ struct Interface
 		typedef std::vector<Camera> CameraArr;
 
 		// structure describing a pose along the trajectory of a platform
+		// 描述沿平台轨迹的姿态的结构
 		struct Pose {
 			Mat33d R; // platform's rotation matrix
-			Pos3d C; // platform's translation vector in the global coordinate system
+			Pos3d C; // platform's translation vector in the global coordinate system 全局坐标系中的平台平移向量
 
 			template <class Archive>
 			void serialize(Archive& ar, const unsigned int /*version*/) {
@@ -401,7 +406,7 @@ struct Interface
 
 		std::string name; // platform's name
 		CameraArr cameras; // cameras mounted on the platform
-		PoseArr poses; // trajectory of the platform
+		PoseArr poses; // trajectory of the platform	平台的轨迹
 
 		const Mat33d& GetK(uint32_t cameraID) const {
 			return cameras[cameraID].K;
@@ -413,7 +418,7 @@ struct Interface
 			// add the relative camera pose to the platform
 			return Pose{
 				camera.R*pose.R,
-				pose.R.t()*camera.C+pose.C
+				pose.R.t()*camera.C+pose.C	// TODO
 			};
 		}
 
@@ -541,8 +546,10 @@ struct Interface
 	LineArr lines; // array of reconstructed 3D lines
 	NormalArr linesNormal; // array of reconstructed 3D lines' normal (optional)
 	ColorArr linesColor; // array of reconstructed 3D lines' color (optional)
+	// 从绝对坐标系到相对坐标系的转换
 	Mat44d transform; // transformation used to convert from absolute to relative coordinate system (optional)
 
+	// 创建4 x 4的对角矩阵
 	Interface() : transform(Mat44d::eye()) {}
 
 	const Mat33d& GetK(uint32_t imageID) const {

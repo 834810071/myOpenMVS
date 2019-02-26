@@ -401,7 +401,7 @@ public:
 	{
 		if (_vectorSize <= _size)
 			_Grow(_vectorSize + grow);
-		if (useConstruct)
+		if (useConstruct)	// 如果是结构体
 			return *(new(_vector + (_size++)) TYPE);
 		else
 			return _vector[_size++];

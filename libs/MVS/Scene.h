@@ -49,9 +49,13 @@ namespace MVS {
 class MVS_API Scene
 {
 public:
+    // 摄像机平台，每个包含安装的摄像机和所有已知姿势
 	PlatformArr platforms; // camera platforms, each containing the mounted cameras and all known poses
+	// 图像，每个图像引用一个平台的相机姿态
 	ImageArr images; // images, each referencing a platform's camera pose
+	// 点云（稀疏的或稠密的），每个点云包含点位置和看到点的视图
 	PointCloud pointcloud; // point-cloud (sparse or dense), each containing the point position and the views seeing it
+	// 网格，表示为顶点和三角形，由输入点云构造
 	Mesh mesh; // mesh, represented as vertices and triangles, constructed from the input point-cloud
 
 	unsigned nCalibratedImages; // number of valid images

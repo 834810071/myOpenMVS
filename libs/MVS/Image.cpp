@@ -40,6 +40,7 @@ using namespace MVS;
 
 // S T R U C T S ///////////////////////////////////////////////////
 
+// 打开图像，返回图像的首指针
 IMAGEPTR Image::OpenImage(const String& fileName)
 {
 	#if 0
@@ -52,10 +53,11 @@ IMAGEPTR Image::OpenImage(const String& fileName)
 } // OpenImage
 /*----------------------------------------------------------------*/
 
+// 返回图像头指针
 IMAGEPTR Image::ReadImageHeader(const String& fileName)
 {
 	IMAGEPTR pImage(OpenImage(fileName));
-	if (pImage == NULL || FAILED(pImage->ReadHeader())) {
+	if (pImage == NULL || FAILED(pImage->ReadHeader())) {   // pImage->ReadHeader() { return ok; }
 		LOG("error: failed loading image header");
 		pImage.Release();
 	}
@@ -63,6 +65,7 @@ IMAGEPTR Image::ReadImageHeader(const String& fileName)
 } // ReadImageHeader
 /*----------------------------------------------------------------*/
 
+//
 IMAGEPTR Image::ReadImage(const String& fileName, Image8U3& image)
 {
 	IMAGEPTR pImage(OpenImage(fileName));
