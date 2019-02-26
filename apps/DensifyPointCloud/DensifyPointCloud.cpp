@@ -212,8 +212,8 @@ int main(int argc, LPCTSTR* argv)
 		return EXIT_FAILURE;
 
 	Scene scene(OPT::nMaxThreads);
-	if (OPT::fSampleMesh != 0) {
-		// sample input mesh and export the obtained point-cloud
+	if (OPT::fSampleMesh != 0) {	// 均匀采样网格上的点
+		// sample input mesh and export the obtained point-cloud	采样输入网格并导出获得的点云
 		if (!scene.mesh.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))
 			return EXIT_FAILURE;
 		TD_TIMER_START();

@@ -176,7 +176,7 @@ CImage::Size CImage::GetDataSizes(Size mipLevel, Size& width, Size& height) cons
 	height = MAXF((Size)1, m_height >> mipLevel);
 	width  = MAXF((Size)1, m_width >> mipLevel);
 
-	// if compressed, divide dims by 4
+	// if compressed, divide dims by 4 如果压缩，将DIMS除以4
 	if (m_format >= PF_DXT1)
 	{
 		width = (width+3)>>2;

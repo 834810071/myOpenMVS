@@ -72,7 +72,7 @@ public:
 
 public:
 	PointArr points;
-	PointViewArr pointViews; // array of views for each point (ordered increasing)
+	PointViewArr pointViews; // array of views for each point (ordered increasing) 每个点的视图数组（按顺序递增）
 	PointWeightArr pointWeights;
 	NormalArr normals;
 	ColorArr colors;

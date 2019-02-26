@@ -58,7 +58,8 @@ bool Scene::IsEmpty() const
 	return pointcloud.IsEmpty() && mesh.IsEmpty();
 }
 
-
+// 从接口（Interface类中）提取platforms、image、pointcloud提取到
+// platforms(单独Scene类)、image(单独Scene类)、pointcloud(单独Scene类中)
 bool Scene::LoadInterface(const String & fileName)
 {
 	TD_TIMER_STARTD();
@@ -92,7 +93,7 @@ bool Scene::LoadInterface(const String & fileName)
 				camera.K(1,2) *= scale;
 			}
 			//DEBUG_EXTRA("Camera model loaded: platform %u; camera %2u; f %.3fx%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
-			DEBUG_EXTRA("相机模型加载数量: platform %u; camera %2u; f(焦距) %.3f x(偏移量)%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
+			DEBUG_EXTRA("（libs/MVS/Scene.cpp）相机模型加载数量: platform %u; camera %2u; f(焦距) %.3f x(偏移量)%.3f; poses %u", platforms.GetSize()-1, platform.cameras.GetSize()-1, camera.K(0,0), camera.K(1,1), itPlatform->poses.size());
 
 		}
 		ASSERT(platform.cameras.GetSize() == itPlatform->cameras.size());	// 确保相机全部添加进去
@@ -130,7 +131,7 @@ bool Scene::LoadInterface(const String & fileName)
 		imageData.name = MAKE_PATH_FULL(WORKING_FOLDER_FULL, imageData.name);	// 将给定路径添加到给定文件名  WORKING_FOLDER_FULL 当前文件夹的完整路径
 		imageData.poseID = image.poseID;
 		if (imageData.poseID == NO_ID) {	// 表明未校准
-			DEBUG_EXTRA("warning: uncalibrated image '%s'", image.name.c_str());
+			DEBUG_EXTRA("（libs/MVS/Scene.cpp）warning: uncalibrated image '%s'", image.name.c_str());
 			continue;
 		}
 		imageData.platformID = image.platformID;
@@ -147,30 +148,33 @@ bool Scene::LoadInterface(const String & fileName)
 			if (!imageData.ReloadImage(0, false))
 				return false;
 		}
-		imageData.UpdateCamera(platforms);
-		++nCalibratedImages;
+		imageData.UpdateCamera(platforms);  // 从归一化变为非归一化并计算投影矩阵
+		++nCalibratedImages;    // 校准图像+1
 		nTotalPixels += imageData.width * imageData.height;
-		DEBUG_EXTRA("Image loaded %3u: %s", ID, Util::getFileNameExt(imageData.name).c_str());
+		DEBUG_EXTRA("（libs/MVS/Scene.cpp）Image loaded %3u: %s", ID, Util::getFileNameExt(imageData.name).c_str());
 	}
+	// 如果可以使用的图像数目小于2，则退出
 	if (images.GetSize() < 2)
 		return false;
 
-	// import 3D points
-	if (!obj.vertices.empty()) {
+	// import 3D points 嵌入3D点
+	// 将interface类中的3d点复制到Scene类的点云中
+	if (!obj.vertices.empty()) {    // 坐标 + 在哪副视图当中
 		bool bValidWeights(false);
-		pointcloud.points.Resize(obj.vertices.size());
-		pointcloud.pointViews.Resize(obj.vertices.size());
-		pointcloud.pointWeights.Resize(obj.vertices.size());
+		pointcloud.points.Resize(obj.vertices.size());  // 点云中的点申请空间
+		pointcloud.pointViews.Resize(obj.vertices.size());  // 点云中的视图申请空间
+		pointcloud.pointWeights.Resize(obj.vertices.size());	// 点云中点的宽度申请空间
 		FOREACH(i, pointcloud.points) {
 			const Interface::Vertex& vertex = obj.vertices[i];
 			PointCloud::Point& point = pointcloud.points[i];
-			point = vertex.X;
+			point = vertex.X;	// 3D point position
+
 			PointCloud::ViewArr& views = pointcloud.pointViews[i];
-			views.Resize((PointCloud::ViewArr::IDX)vertex.views.size());
+			views.Resize((PointCloud::ViewArr::IDX)vertex.views.size());	// 每个点对应的视图数组再申请空间
 			PointCloud::WeightArr& weights = pointcloud.pointWeights[i];
 			weights.Resize((PointCloud::ViewArr::IDX)vertex.views.size());
-			CLISTDEF0(PointCloud::ViewArr::IDX) indices(views.GetSize());
-			std::iota(indices.Begin(), indices.End(), 0);
+			CLISTDEF0(PointCloud::ViewArr::IDX) indices(views.GetSize());	// TODO
+			std::iota(indices.Begin(), indices.End(), 0);	// C++中iota是用来批量递增赋值vector的元素；
 			std::sort(indices.Begin(), indices.End(), [&](IndexArr::Type i0, IndexArr::Type i1) -> bool {
 				return vertex.views[i0].imageID < vertex.views[i1].imageID;
 			});
@@ -183,11 +187,11 @@ bool Scene::LoadInterface(const String & fileName)
 					bValidWeights = true;
 			});
 		}
-		if (!bValidWeights)
+		if (!bValidWeights)	// 如果没有有效的宽度
 			pointcloud.pointWeights.Release();
-		if (!obj.verticesNormal.empty()) {
+		if (!obj.verticesNormal.empty()) {	// 重建三维点法线数组（可选） 为空
 			ASSERT(obj.vertices.size() == obj.verticesNormal.size());
-			pointcloud.normals.CopyOf((const Point3f*)&obj.verticesNormal[0].n, obj.vertices.size());
+			pointcloud.normals.CopyOf((const Point3f*)&obj.verticesNormal[0].n, obj.vertices.size());	// TODO
 		}
 		if (!obj.verticesColor.empty()) {
 			ASSERT(obj.vertices.size() == obj.verticesColor.size());
@@ -195,7 +199,7 @@ bool Scene::LoadInterface(const String & fileName)
 		}
 	}
 
-	DEBUG_EXTRA("Scene loaded from interface format (%s):\n"
+	DEBUG_EXTRA("（libs/MVS/Scene.cpp）Scene loaded from interface format (%s):\n"
 				"\t%u images (%u calibrated) with a total of %.2f MPixels (%.2f MPixels/image)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
@@ -204,17 +208,19 @@ bool Scene::LoadInterface(const String & fileName)
 	return true;
 } // LoadInterface
 
+// 将platforms(Scene类)、image(Scene类)、pointcloud(Scene类中)保存到接口（Interface类中）
 bool Scene::SaveInterface(const String & fileName) const
 {
 	TD_TIMER_STARTD();
 	Interface obj;
 
-	// export platforms
-	obj.platforms.reserve(platforms.GetSize());
+	// export platforms	（cameras poses name）
+	obj.platforms.reserve(platforms.GetSize());	// 申请空间
 	FOREACH(i, platforms) {
 		const Platform& platform = platforms[i];
 		Interface::Platform plat;
 		plat.cameras.reserve(platform.cameras.GetSize());
+		// 直接从scene::platform::camera 加入 interface::platform::camera(K[内参矩阵], R[旋转矩阵], C[相机中心]) 数组中
 		FOREACH(j, platform.cameras) {
 			const Platform::Camera& camera = platform.cameras[j];
 			Interface::Platform::Camera cam;
@@ -239,27 +245,32 @@ bool Scene::SaveInterface(const String & fileName) const
 	FOREACH(i, images) {
 		const Image& imageData = images[i];
 		MVS::Interface::Image& image = obj.images[i];
-		image.name = MAKE_PATH_REL(WORKING_FOLDER_FULL, imageData.name);
+		image.name = MAKE_PATH_REL(WORKING_FOLDER_FULL, imageData.name);	// 仅保存文件名，去除文件路径信息
 		image.poseID = imageData.poseID;
 		image.platformID = imageData.platformID;
 		image.cameraID = imageData.cameraID;
 	}
 
-	// export 3D points
+	// export 3D points  （PointArr points;
+	//					  PointViewArr pointViews; // array of views for each point (ordered increasing) 每个点的视图数组（按顺序递增）
+	//				   	  PointWeightArr pointWeights;
+	//					  NormalArr normals;
+	//					  ColorArr colors;）
 	obj.vertices.resize(pointcloud.points.GetSize());
 	FOREACH(i, pointcloud.points) {
 		const PointCloud::Point& point = pointcloud.points[i];
 		const PointCloud::ViewArr& views = pointcloud.pointViews[i];
 		MVS::Interface::Vertex& vertex = obj.vertices[i];
-		ASSERT(sizeof(vertex.X.x) == sizeof(point.x));
+		ASSERT(sizeof(vertex.X.x) == sizeof(point.x));	// 确保空间大小相等
 		vertex.X = point;
-		vertex.views.resize(views.GetSize());
+		vertex.views.resize(views.GetSize());	// interface::vertex::view(imageid, confidence)
 		views.ForEach([&](PointCloud::ViewArr::IDX v) {
 			MVS::Interface::Vertex::View& view = vertex.views[v];
 			view.imageID = views[v];
 			view.confidence = (pointcloud.pointWeights.IsEmpty() ? 0.f : pointcloud.pointWeights[i][v]);
 		});
 	}
+	// interface::Normal(一个3d点坐标)
 	if (!pointcloud.normals.IsEmpty()) {
 		obj.verticesNormal.resize(pointcloud.normals.GetSize());
 		FOREACH(i, pointcloud.normals) {
@@ -277,11 +288,11 @@ bool Scene::SaveInterface(const String & fileName) const
 		}
 	}
 
-	// serialize out the current state
+	// serialize out the current state 存档
 	if (!ARCHIVE::SerializeSave(obj, fileName))
 		return false;
 
-	DEBUG_EXTRA("Scene saved to interface format (%s):\n"
+	DEBUG_EXTRA("（libs/MVS/Scene.cpp）Scene saved to interface format (%s):\n"
 				"\t%u images (%u calibrated)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
@@ -292,22 +303,23 @@ bool Scene::SaveInterface(const String & fileName) const
 /*----------------------------------------------------------------*/
 
 // try to load known point-cloud or mesh files
+// 尝试加载已知的点云或网格文件
 bool Scene::Import(const String& fileName)
 {
-	const String ext(Util::getFileExt(fileName).ToLower());
+	const String ext(Util::getFileExt(fileName).ToLower());	// 获取文件后缀名
 	if (ext == _T(".obj")) {
-		// import mesh from obj file
+		// import mesh from obj file 网格
 		Release();
 		return mesh.Load(fileName);
 	}
 	if (ext == _T(".ply")) {
-		// import point-cloud/mesh from ply file
+		// import point-cloud/mesh from ply file 从ply文件加载点云/网格
 		Release();
 		int nVertices(0), nFaces(0);
 		{
 		PLY ply;
 		if (!ply.read(fileName)) {
-			DEBUG_EXTRA("error: invalid PLY file");
+			DEBUG_EXTRA("（libs/MVS/Scene.cpp）error: invalid PLY file");
 			return false;
 		}
 		for (int i = 0; i < (int)ply.elems.size(); ++i) {
@@ -345,18 +357,18 @@ bool Scene::Load(const String& fileName, bool bImport)
 	fs.read(szHeader, 4);
 	if (!fs || _tcsncmp(szHeader, PROJECT_ID, 4) != 0) {
 		fs.close();
-		if (bImport && Import(fileName))
+		if (bImport && Import(fileName))    // 从文件中获取
 			return true;
-		if (LoadInterface(fileName))
+		if (LoadInterface(fileName))    // 从interface类中获取
 			return true;
-		VERBOSE("error: invalid project");
+		VERBOSE("(libs/MVS/Scene.cpp)error: invalid project");
 		return false;
 	}
 	// load project version
 	uint32_t nVer;
 	fs.read((char*)&nVer, sizeof(uint32_t));
 	if (!fs || nVer != PROJECT_VER) {
-		VERBOSE("error: different project version");
+		VERBOSE("(libs/MVS/Scene.cpp)error: different project version");
 		return false;
 	}
 	// load stream type
@@ -373,13 +385,13 @@ bool Scene::Load(const String& fileName, bool bImport)
 	size_t nTotalPixels(0);
 	FOREACH(ID, images) {
 		Image& imageData = images[ID];
-		if (imageData.poseID == NO_ID)
+		if (imageData.poseID == NO_ID)  // 图片必须要有对应的位姿
 			continue;
-		imageData.UpdateCamera(platforms);
+		imageData.UpdateCamera(platforms);  // 从归一化变为非归一化并计算投影矩阵
 		++nCalibratedImages;
 		nTotalPixels += imageData.width * imageData.height;
 	}
-	DEBUG_EXTRA("Scene loaded (%s):\n"
+	DEBUG_EXTRA("(libs/MVS/Scene.cpp)Scene loaded (%s):\n"
 				"\t%u images (%u calibrated) with a total of %.2f MPixels (%.2f MPixels/image)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
@@ -394,7 +406,7 @@ bool Scene::Load(const String& fileName, bool bImport)
 bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 {
 	TD_TIMER_STARTD();
-	// save using MVS interface if requested
+	// save using MVS interface if requested    // 如果使用interface类存储，需要保证不是网格类型
 	if (type == ARCHIVE_MVS) {
 		if (mesh.IsEmpty())
 			return SaveInterface(fileName);
@@ -419,7 +431,7 @@ bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 	// serialize out the current state
 	if (!SerializeSave(*this, fs, type))
 		return false;
-	DEBUG_EXTRA("Scene saved (%s):\n"
+	DEBUG_EXTRA("(libs/MVS/Scene.cpp)Scene saved (%s):\n"
 				"\t%u images (%u calibrated)\n"
 				"\t%u points, %u vertices, %u faces",
 				TD_TIMER_GET_FMT().c_str(),
@@ -434,25 +446,27 @@ bool Scene::Save(const String& fileName, ARCHIVE_TYPE type) const
 
 
 inline float Footprint(const Camera& camera, const Point3f& X) {
-	const REAL fSphereRadius(1);
-	const Point3 cX(camera.TransformPointW2C(Cast<REAL>(X)));
+	const REAL fSphereRadius(1);    // 球型半径
+	const Point3 cX(camera.TransformPointW2C(Cast<REAL>(X)));   // 世界坐标系到相机坐标系
+	// TransformPointC2I(从相机空间投影到图像像素 ) x的范数值 （[3, 4] 返回 5）
 	return (float)norm(camera.TransformPointC2I(Point3(cX.x+fSphereRadius,cX.y,cX.z))-camera.TransformPointC2I(cX))+std::numeric_limits<float>::epsilon();
 }
 
 // compute visibility for the reference image
 // and select the best views for reconstructing the dense point-cloud;
 // extract also all 3D points seen by the reference image;
-// (inspired by: "Multi-View Stereo for Community Photo Collections", Goesele, 2007)
+// (inspired by: "Multi-View Stereo for Community Photo Collections", Goesele, 2007)  TODO
 bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinViews, unsigned nMinPointViews, float fOptimAngle)
 {
 	ASSERT(points.IsEmpty());
 
 	// extract the estimated 3D points and the corresponding 2D projections for the reference image
+	// 提取用于参考图像的估计的3D点和对应的2D投影
 	Image& imageData = images[ID];
 	ASSERT(imageData.IsValid());
-	ViewScoreArr& neighbors = imageData.neighbors;
+	ViewScoreArr& neighbors = imageData.neighbors;  // score&store the neighbor images
 	ASSERT(neighbors.IsEmpty());
-	struct Score {
+	struct Score {  // 评分
 		float score;
 		float avgScale;
 		float avgAngle;
@@ -464,25 +478,26 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		nMinPointViews = nCalibratedImages;
 	unsigned nPoints = 0;
 	imageData.avgDepth = 0;
+	// 提取参考图像所看到的点
 	FOREACH(idx, pointcloud.points) {
-		const PointCloud::ViewArr& views = pointcloud.pointViews[idx];
-		ASSERT(views.IsSorted());
-		if (views.FindFirst(ID) == PointCloud::ViewArr::NO_INDEX)
+		const PointCloud::ViewArr& views = pointcloud.pointViews[idx];  // 该点对应的视图数组
+		ASSERT(views.IsSorted());   // 保证视图数组排序
+		if (views.FindFirst(ID) == PointCloud::ViewArr::NO_INDEX)   // 如果该视图不存在，则继续
 			continue;
-		// store this point
+		// store this point 存储此点
 		const PointCloud::Point& point = pointcloud.points[idx];
 		if (views.GetSize() >= nMinPointViews)
 			points.Insert((uint32_t)idx);
-		imageData.avgDepth += (float)imageData.camera.PointDepth(point);
+		imageData.avgDepth += (float)imageData.camera.PointDepth(point);    // P(2,0)*X.x + P(2,1)*X.y + P(2,2)*X.z + P(2,3) P(投影矩阵) TODO
 		++nPoints;
-		// score shared views
+		// score shared views 对共享视图评分 C 平移（3，1），外部摄像机参数
 		const Point3f V1(imageData.camera.C - Cast<REAL>(point));
-		const float footprint1(Footprint(imageData.camera, point));
+		const float footprint1(Footprint(imageData.camera, point)); // 足迹
 		FOREACHPTR(pView, views) {
 			const PointCloud::View& view = *pView;
-			if (view == ID)
+			if (view == ID) // 如果该视图是当前视图，则继续
 				continue;
-			const Image& imageData2 = images[view];
+			const Image& imageData2 = images[view]; // view 是 int类型
 			const Point3f V2(imageData2.camera.C - Cast<REAL>(point));
 			const float footprint2(Footprint(imageData2.camera, point));
 			const float fAngle(ACOS(ComputeAngle<float,float>(V1.ptr(), V2.ptr())));
@@ -517,11 +532,12 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		ASSERT(ID != IDB);
 		ViewScore& neighbor = neighbors.AddEmpty();
 		// compute how well the matched features are spread out (image covered area)
-		const Point2f boundsA(imageData.GetSize());
+		// 计算匹配特征的分布情况（图像覆盖区域）
+		const Point2f boundsA(imageData.GetSize()); // 该视图
 		const Point2f boundsB(imageDataB.GetSize());
 		ASSERT(pointsA.IsEmpty() && pointsB.IsEmpty());
 		FOREACHPTR(pIdx, points) {
-			const PointCloud::ViewArr& views = pointcloud.pointViews[*pIdx];
+			const PointCloud::ViewArr& views = pointcloud.pointViews[*pIdx];    // 点对应的视图
 			ASSERT(views.IsSorted());
 			ASSERT(views.FindFirst(ID) != PointCloud::ViewArr::NO_INDEX);
 			if (views.FindFirst(IDB) == PointCloud::ViewArr::NO_INDEX)
@@ -554,11 +570,11 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		String msg;
 		FOREACH(n, neighbors)
 			msg += String::FormatString(" %3u(%upts,%.2fscl)", neighbors[n].idx.ID, neighbors[n].idx.points, neighbors[n].idx.scale);
-		VERBOSE("Reference image %3u sees %u views:%s (%u shared points)", ID, neighbors.GetSize(), msg.c_str(), nPoints);
+		VERBOSE("(libs/MVS/Scene.cpp)Reference image %3u sees %u views:%s (%u shared points)", ID, neighbors.GetSize(), msg.c_str(), nPoints);
 	}
 	#endif
 	if (points.GetSize() <= 3 || neighbors.GetSize() < MINF(nMinViews,nCalibratedImages-1)) {
-		DEBUG_EXTRA("error: reference image %3u has not enough images in view", ID);
+		DEBUG_EXTRA("(libs/MVS/Scene.cpp)error: reference image %3u has not enough images in view", ID);
 		return false;
 	}
 	return true;
@@ -584,6 +600,7 @@ bool Scene::FilterNeighborViews(ViewScoreArr& neighbors, float fMinArea, float f
 
 
 // export all estimated cameras in a MeshLab MLP project as raster layers
+// 导出Meshlab MLP项目中所有估计的摄像机作为光栅层
 bool Scene::ExportCamerasMLP(const String& fileName, const String& fileNameScene) const
 {
 	static const char mlp_header[] =
@@ -619,7 +636,7 @@ bool Scene::ExportCamerasMLP(const String& fileName, const String& fileNameScene
 	// write MLP header containing the referenced PLY file
 	f.print(mlp_header, Util::getFileName(fileNameScene).c_str(), MAKE_PATH_REL(WORKING_FOLDER_FULL, fileNameScene).c_str());
 
-	// write the raster layers
+	// write the raster layers	写入光栅层
 	f <<  " <RasterGroup>\n";
 	FOREACH(i, images) {
 		const Image& imageData = images[i];

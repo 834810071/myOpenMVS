@@ -2088,7 +2088,8 @@ unsigned TImage<TYPE>::computeMaxResolution(unsigned width, unsigned height, uns
 	if (level == 0)
 		return MINF(imageSize, maxImageSize);
 	// compute the resolution corresponding to the desired level
-	unsigned size = (imageSize >> level);
+	// 计算与所需级别相对应的分辨率	 图像金字塔
+	unsigned size = (imageSize >> level)
 	// if the image is too small
 	if (size < minImageSize) {
 		// start from the max level
@@ -2274,7 +2275,7 @@ inline void _ProcessScanLine(int y, const TPoint3<T>& pa, const TPoint3<T>& pb, 
 	}
 }
 // Raster the given triangle and output the position and depth of each pixel of the triangle;
-// based on "Learning how to write a 3D software engine � Rasterization & Z-Buffering" by Nick (David Rousset)
+// based on "Learning how to write a 3D software engine � Rasterization & Z-Buffering" by Nick (David Rousset)
 // http://blogs.msdn.com/b/davrous/archive/2013/06/21/tutorial-part-4-learning-how-to-write-a-3d-software-engine-in-c-ts-or-js-rasterization-amp-z-buffering.aspx
 template <typename TYPE>
 template <typename T, typename PARSER>
@@ -2613,7 +2614,7 @@ bool TImage<TYPE>::Load(const String& fileName)
 	}
 	cv::Mat img(cv::imread(fileName, cv::IMREAD_UNCHANGED));
 	if (img.empty()) {
-		VERBOSE("error: loading image '%s'", fileName.c_str());
+		VERBOSE("(libs/Common/Types/inL)error: loading image '%s'", fileName.c_str());
 		return false;
 	}
 	if (img.channels() != Base::channels()) {
@@ -2668,12 +2669,12 @@ bool TImage<TYPE>::Save(const String& fileName) const
 
 	try {
 		if (!cv::imwrite(fileName, *this, compression_params)) {
-			VERBOSE("error: saving image '%s'", fileName.c_str());
+			VERBOSE("(libs/Common/Types/inL)error: saving image '%s'", fileName.c_str());
 			return false;
 		}
 	}
 	catch (std::runtime_error& ex) {
-		VERBOSE("error: saving image '%s' (exception: %s)", fileName.c_str(), ex.what());
+		VERBOSE("(libs/Common/Types/inL)error: saving image '%s' (exception: %s)", fileName.c_str(), ex.what());
 		return false;
 	}
 	return true;
@@ -3400,7 +3401,7 @@ bool SerializeSave(const TYPE& obj, std::ofstream& fs, ARCHIVE_TYPE type, unsign
 		ar << obj;
 		break; }
 	default:
-		VERBOSE("error: Can not save the object, invalid archive type");
+		VERBOSE("(libs/Common/Types/inL)error: Can not save the object, invalid archive type");
 		return false;
 	}
 	return true;
@@ -3440,12 +3441,12 @@ bool SerializeLoad(TYPE& obj, std::ifstream& fs, ARCHIVE_TYPE type, unsigned fla
 			ar >> obj;
 			break; }
 		default:
-			VERBOSE("error: Can not load the object, invalid archive type");
+			VERBOSE("(libs/Common/Types/inL)error: Can not load the object, invalid archive type");
 			return false;
 		}
 	}
 	catch (const std::exception& e) {
-		VERBOSE("error: invalid stream (%s)", e.what());
+		VERBOSE("(libs/Common/Types/inL)error: invalid stream (%s)", e.what());
 		return false;
 	}
 	return true;

@@ -170,14 +170,14 @@ void MVS::DecomposeProjectionMatrix(const PMatrix& P, RMatrix& R, CMatrix& C)
 } // DecomposeProjectionMatrix
 /*----------------------------------------------------------------*/
 
-// assemble projection matrix: P=KR[I|-C]
+// assemble projection matrix: P=KR[I|-C]	组合投影矩阵  空间点映射到图像中 K 3*3	R 3*3 相机旋转矩阵	C 3*1 相机中心
 void MVS::AssembleProjectionMatrix(const KMatrix& K, const RMatrix& R, const CMatrix& C, PMatrix& P)
 {
 	// compute temporary matrices
 	cv::Mat mP(3,4,cv::DataType<REAL>::type,(void*)P.val);
 	cv::Mat M(mP, cv::Rect(0,0, 3,3));
 	cv::Mat(K * R).copyTo(M); //3x3
-	mP.col(3) = M * cv::Mat(-C); //3x1
+	mP.col(3) = M * cv::Mat(-C); //3x1	3*3 * 3*1 = 3*1；
 } // AssembleProjectionMatrix
 void MVS::AssembleProjectionMatrix(const RMatrix& R, const CMatrix& C, PMatrix& P)
 {

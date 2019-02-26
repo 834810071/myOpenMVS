@@ -46,6 +46,7 @@ ObjModel::MaterialLib::MaterialLib()
 {
 }
 
+// 将材质库保存到一个.mtl文件中，并使用给定的前缀名称保存材质的所有纹理。
 bool ObjModel::MaterialLib::Save(const String& prefix, bool texLossless) const
 {
 	std::ofstream out((prefix+".mtl").c_str());
@@ -136,7 +137,7 @@ bool ObjModel::Save(const String& fileName, unsigned precision, bool texLossless
 
 	out << "mtllib " << name << ".mtl" << "\n";
 
-	out << std::fixed << std::setprecision(precision);
+	out << std::fixed << std::setprecision(precision);	// 设置精度
 	for (size_t i = 0; i < vertices.size(); ++i) {
 		out << "v "
 			<< vertices[i][0] << " "
@@ -158,8 +159,9 @@ bool ObjModel::Save(const String& fileName, unsigned precision, bool texLossless
 	}
 
 	for (size_t i = 0; i < groups.size(); ++i) {
-		out << "usemtl " << groups[i].material_name << "\n";
+		out << "usemtl " << groups[i].material_name << "\n";	// 使用的材料库
 		for (size_t j = 0; j < groups[i].faces.size(); ++j) {
+			// TODO
 			Face const & face =  groups[i].faces[j];
 			out << "f";
 			for (size_t k = 0; k < 3; ++k) {
@@ -175,7 +177,7 @@ bool ObjModel::Save(const String& fileName, unsigned precision, bool texLossless
 
 bool ObjModel::Load(const String& fileName)
 {
-	ASSERT(vertices.empty() && groups.empty() && material_lib.materials.empty());
+	ASSERT(vertices.empty() && groups.empty() && material_lib.materials.empty());	// 确保为空
 	std::ifstream fin(fileName.c_str());
 	String line, keyword;
 	std::istringstream in;
@@ -209,6 +211,7 @@ bool ObjModel::Load(const String& fileName)
 		if (keyword == "f") {
 			Face f;
 			memset(&f, 0xFF, sizeof(Face));
+			// TODO
 			for (size_t k = 0; k < 3; ++k) {
 				in >> keyword;
 				switch (sscanf(keyword, "%u/%u/%u", f.vertices+k, f.texcoords+k, f.normals+k)) {
@@ -258,7 +261,7 @@ ObjModel::Group& ObjModel::AddGroup(const String& material_name)
 	groups.push_back(Group());
 	Group& group = groups.back();
 	group.material_name = material_name;
-	if (!GetMaterial(material_name))
+	if (!GetMaterial(material_name))	// 如果在材料库中没有找见
 		material_lib.materials.push_back(MaterialLib::Material(material_name));
 	return group;
 }

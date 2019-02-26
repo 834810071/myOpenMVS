@@ -122,6 +122,7 @@ public:
 	}
 
 	// create K with the supplied focal length and sensor center
+	// 用提供的焦距和传感器中心创建K	TODO
 	template<typename TYPE, typename TYPER>
 	static inline TMatrix<TYPE,3,3> ComposeK(const TYPE& fX, const TYPE& fY, TYPER w=TYPER(1), TYPER h=TYPER(1)) {
 		ASSERT(w>0 && h>0);
@@ -144,11 +145,12 @@ public:
 	}
 
 	// returns full K and the inverse of K (assuming standard K format)
+	// 返回全k和k的倒数（假定为标准k格式）
 	template<typename TYPE>
 	inline TMatrix<TYPE,3,3> GetK(uint32_t width, uint32_t height) const {
 		ASSERT(width>0 && height>0);
-		const float fScale(GetNormalizationScale(width, height));
-		if (K(0,2)==0 && K(1,2)==0)
+		const float fScale(GetNormalizationScale(width, height));	// max(width, height);
+		if (K(0,2)==0 && K(1,2)==0)	// 主点偏移为0，没有偏移的时候
 			return ComposeK(
 				TYPE(K(0,0)*fScale), TYPE(K(1,1)*fScale),
 				width, height );
@@ -324,7 +326,7 @@ public:
 			TYPE(K(0,0)*X.x/X.z),
 			TYPE(K(1,1)*X.y/X.z) );
 	}
-	// project from the camera space to image pixels
+	// project from the camera space to image pixels 从相机空间投影到图像像素
 	template <typename TYPE>
 	inline TPoint2<TYPE> TransformPointC2I(const TPoint3<TYPE>& X) const {
 		return TransformPointC2I(TPoint2<TYPE>(X.x/X.z, X.y/X.z));

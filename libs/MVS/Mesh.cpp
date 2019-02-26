@@ -1261,7 +1261,7 @@ namespace BasicPLY {
 	};
 } // namespace BasicPLY
 
-// import the mesh from the given file
+// import the mesh from the given file导入网格
 bool Mesh::Load(const String& fileName)
 {
 	TD_TIMER_STARTD();
@@ -1273,10 +1273,10 @@ bool Mesh::Load(const String& fileName)
 		ret = LoadPLY(fileName);
 	if (!ret)
 		return false;
-	DEBUG_EXTRA("Mesh loaded: %u vertices, %u faces (%s)", vertices.GetSize(), faces.GetSize(), TD_TIMER_GET_FMT().c_str());
+	DEBUG_EXTRA("(libs/MVS/Mesh.cpp)Mesh loaded: %u vertices, %u faces (%s)", vertices.GetSize(), faces.GetSize(), TD_TIMER_GET_FMT().c_str());
 	return true;
 }
-// import the mesh as a PLY file
+// import the mesh as a PLY file 从ply文件中导入网格
 bool Mesh::LoadPLY(const String& fileName)
 {
 	ASSERT(!fileName.IsEmpty());
@@ -1285,7 +1285,7 @@ bool Mesh::LoadPLY(const String& fileName)
 	// open PLY file and read header
 	PLY ply;
 	if (!ply.read(fileName)) {
-		DEBUG_EXTRA("error: invalid PLY file");
+		DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: invalid PLY file");
 		return false;
 	}
 	for (int i = 0; i < (int)ply.elems.size(); ++i) {
@@ -1299,7 +1299,7 @@ bool Mesh::LoadPLY(const String& fileName)
 		}
 	}
 	if (vertices.IsEmpty() || faces.IsEmpty()) {
-		DEBUG_EXTRA("error: invalid mesh file");
+		DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: invalid mesh file");
 		return false;
 	}
 
@@ -1324,7 +1324,7 @@ bool Mesh::LoadPLY(const String& fileName)
 				FOREACHPTR(pFace, faces) {
 					ply.get_element(&face);
 					if (face.num != 3) {
-						DEBUG_EXTRA("error: unsupported mesh file (face not triangle)");
+						DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: unsupported mesh file (face not triangle)");
 						return false;
 					}
 					memcpy(pFace, face.pFace, sizeof(VIndex)*3);
@@ -1339,13 +1339,13 @@ bool Mesh::LoadPLY(const String& fileName)
 				FOREACH(f, faces) {
 					ply.get_element(&face);
 					if (face.face.num != 3) {
-						DEBUG_EXTRA("error: unsupported mesh file (face not triangle)");
+						DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: unsupported mesh file (face not triangle)");
 						return false;
 					}
 					memcpy(faces.Begin()+f, face.face.pFace, sizeof(VIndex)*3);
 					delete[] face.face.pFace;
 					if (face.tex.num != 6) {
-						DEBUG_EXTRA("error: unsupported mesh file (texture coordinates not per face vertex)");
+						DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: unsupported mesh file (texture coordinates not per face vertex)");
 						return false;
 					}
 					memcpy(faceTexcoords.Begin()+f*3, face.tex.pTex, sizeof(TexCoord)*3);
@@ -1366,7 +1366,7 @@ bool Mesh::LoadPLY(const String& fileName)
 	}
 	return true;
 }
-// import the mesh as a OBJ file
+// import the mesh as a OBJ file 从OBJ文件中导入网格
 bool Mesh::LoadOBJ(const String& fileName)
 {
 	ASSERT(!fileName.IsEmpty());
@@ -1375,11 +1375,13 @@ bool Mesh::LoadOBJ(const String& fileName)
 	// open and parse OBJ file
 	ObjModel model;
 	if (!model.Load(fileName)) {
-		DEBUG_EXTRA("error: invalid OBJ file");
+		DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: invalid OBJ file");
 		return false;
 	}
+	// TODO
+	// model.get_groups().size() != 1 ???
 	if (model.get_vertices().empty() || model.get_groups().size() != 1 || model.get_groups()[0].faces.empty()) {
-		DEBUG_EXTRA("error: invalid mesh file");
+		DEBUG_EXTRA("(libs/MVS/Mesh.cpp)error: invalid mesh file");
 		return false;
 	}
 
@@ -1399,7 +1401,7 @@ bool Mesh::LoadOBJ(const String& fileName)
 	// store faces
 	const ObjModel::Group& group = model.get_groups()[0];
 	ASSERT(group.faces.size() < std::numeric_limits<FIndex>::max());
-	faces.Reserve((FIndex)group.faces.size());
+	faces.Reserve((FIndex)group.faces.size());	// 申请空间
 	for (const ObjModel::Face& f: group.faces) {
 		ASSERT(f.vertices[0] != NO_ID);
 		faces.AddConstruct(f.vertices[0], f.vertices[1], f.vertices[2]);
@@ -1411,7 +1413,7 @@ bool Mesh::LoadOBJ(const String& fileName)
 			Normal& n = faceNormals.AddConstruct(Normal::ZERO);
 			for (int i=0; i<3; ++i)
 				n += normalized(model.get_normals()[f.normals[i]]);
-			normalize(n);
+			normalize(n);	// 正常化
 		}
 	}
 

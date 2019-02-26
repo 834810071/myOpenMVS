@@ -58,14 +58,14 @@ IMAGEPTR Image::ReadImageHeader(const String& fileName)
 {
 	IMAGEPTR pImage(OpenImage(fileName));
 	if (pImage == NULL || FAILED(pImage->ReadHeader())) {   // pImage->ReadHeader() { return ok; }
-		LOG("error: failed loading image header");
+		LOG("（libs/MVS/Image.cpp）error: failed loading image header");
 		pImage.Release();
 	}
 	return pImage;
 } // ReadImageHeader
 /*----------------------------------------------------------------*/
 
-//
+// 返回图像头指针
 IMAGEPTR Image::ReadImage(const String& fileName, Image8U3& image)
 {
 	IMAGEPTR pImage(OpenImage(fileName));
@@ -78,12 +78,12 @@ IMAGEPTR Image::ReadImage(const String& fileName, Image8U3& image)
 bool Image::ReadImage(IMAGEPTR pImage, Image8U3& image)
 {
 	if (FAILED(pImage->ReadHeader())) {
-		LOG("error: failed loading image header");
+		LOG("（libs/MVS/Image.cpp）error: failed loading image header");
 		return false;
 	}
 	image.create(pImage->GetHeight(), pImage->GetWidth());
 	if (FAILED(pImage->ReadData(image.data, PF_R8G8B8, 3, (CImage::Size)image.step))) {
-		LOG("error: failed loading image data");
+		LOG("（libs/MVS/Image.cpp）error: failed loading image data");
 		return false;
 	}
 	return true;
@@ -97,12 +97,12 @@ bool Image::LoadImage(const String& fileName, unsigned nMaxResolution)
 	// open image file
 	IMAGEPTR pImage(OpenImage(fileName));
 	if (pImage == NULL) {
-		LOG("error: failed opening input image '%s'", name.c_str());
+		LOG("（libs/MVS/Image.cpp）error: failed opening input image '%s'", name.c_str());
 		return false;
 	}
 	// create and fill image data
 	if (!ReadImage(pImage, image)) {
-		LOG("error: failed loading image '%s'", name.c_str());
+		LOG("（libs/MVS/Image.cpp）error: failed loading image '%s'", name.c_str());
 		return false;
 	}
 	// resize image if needed
@@ -114,12 +114,12 @@ bool Image::LoadImage(const String& fileName, unsigned nMaxResolution)
 // open the stored image file name and read again the image data
 bool Image::ReloadImage(unsigned nMaxResolution, bool bLoadPixels)
 {
-	IMAGEPTR pImage(bLoadPixels ? ReadImage(name, image) : ReadImageHeader(name));
+	IMAGEPTR pImage(bLoadPixels ? ReadImage(name, image) : ReadImageHeader(name));  // 根据是否加载像素判断是读取图像还是读取图像头文件
 	if (pImage == NULL) {
-		LOG("error: failed reloading image '%s'", name.c_str());
+		LOG("（libs/MVS/Image.cpp）error: failed reloading image '%s'", name.c_str());
 		return false;
 	}
-	if (!bLoadPixels) {
+	if (!bLoadPixels) { // 如果没有加载像素，则初始化图像大小
 		// init image size
 		width = pImage->GetWidth();
 		height = pImage->GetHeight();
@@ -164,6 +164,7 @@ float Image::ResizeImage(unsigned nMaxResolution)
 /*----------------------------------------------------------------*/
 
 // compute image scale for a given max and min resolution, using the current image file data
+// 使用当前图像文件数据计算给定最大和最小分辨率的图像比例
 unsigned Image::RecomputeMaxResolution(unsigned& level, unsigned minImageSize) const
 {
 	IMAGEPTR pImage(ReadImageHeader(name));
@@ -178,19 +179,21 @@ unsigned Image::RecomputeMaxResolution(unsigned& level, unsigned minImageSize) c
 
 
 // compute the camera extrinsics from the platform pose and the relative camera pose to the platform
+// 从平台姿态和相对于平台的相机姿态计算相机外物
+// 从归一化变为非归一化并计算投影矩阵
 Camera Image::GetCamera(const PlatformArr& platforms, const Image8U::Size& resolution) const
 {
 	ASSERT(platformID != NO_ID);
 	ASSERT(cameraID != NO_ID);
 	ASSERT(poseID != NO_ID);
 
-	// compute the normalized absolute camera pose
+	// compute the normalized absolute camera pose 计算归一化绝对相机姿态
 	const Platform& platform = platforms[platformID];
 	Camera camera(platform.GetCamera(cameraID, poseID));
 
-	// compute the unnormalized camera
+	// compute the unnormalized camera	计算非归一化的相机姿态
 	camera.K = camera.GetK<REAL>(resolution.width, resolution.height);
-	camera.ComposeP();
+	camera.ComposeP();	// 计算投影矩阵
 
 	return camera;
 } // GetCamera

@@ -458,7 +458,7 @@ struct Interface
 	typedef std::vector<Image> ImageArr;
 	/*----------------------------------------------------------------*/
 
-	// structure describing a 3D point
+	// structure describing a 3D point 坐标 + 在哪副视图当中
 	struct Vertex {
 		// structure describing one view for a given 3D feature
 		struct View {
@@ -541,7 +541,7 @@ struct Interface
 	PlatformArr platforms; // array of platforms
 	ImageArr images; // array of images
 	VertexArr vertices; // array of reconstructed 3D points
-	NormalArr verticesNormal; // array of reconstructed 3D points' normal (optional)
+	NormalArr verticesNormal; // array of reconstructed 3D points' normal (optional) 重建三维点法线数组（可选）
 	ColorArr verticesColor; // array of reconstructed 3D points' color (optional)
 	LineArr lines; // array of reconstructed 3D lines
 	NormalArr linesNormal; // array of reconstructed 3D lines' normal (optional)
