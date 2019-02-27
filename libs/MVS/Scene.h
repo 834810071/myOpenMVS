@@ -81,7 +81,7 @@ public:
 
 	bool ExportCamerasMLP(const String& fileName, const String& fileNameScene) const;
 
-	// Dense reconstruction
+	// Dense reconstruction  稠密重建
 	bool DenseReconstruction();
 	void DenseReconstructionEstimate(void*);
 	void DenseReconstructionFilter(void*);

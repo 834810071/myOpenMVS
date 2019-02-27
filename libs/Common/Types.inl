@@ -2089,7 +2089,7 @@ unsigned TImage<TYPE>::computeMaxResolution(unsigned width, unsigned height, uns
 		return MINF(imageSize, maxImageSize);
 	// compute the resolution corresponding to the desired level
 	// 计算与所需级别相对应的分辨率	 图像金字塔
-	unsigned size = (imageSize >> level)
+	unsigned size = (imageSize >> level);
 	// if the image is too small
 	if (size < minImageSize) {
 		// start from the max level

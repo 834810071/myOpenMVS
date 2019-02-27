@@ -1497,14 +1497,15 @@ struct DenseDepthMapData {
 	IIndexArr images;
 	IIndexArr neighborsMap;
 	DepthMapsData detphMaps;
-	volatile Thread::safe_t idxImage;
-	SEACAVE::EventQueue events; // internal events queue (processed by the working threads)
-	Semaphore sem;
+	volatile Thread::safe_t idxImage;	// 易变性
+	SEACAVE::EventQueue events; // internal events queue (processed by the working threads) 内设事件队列（按工作流程处理）
+	Semaphore sem; // 信号灯
 	CAutoPtr<Util::Progress> progress;
 
 	DenseDepthMapData(Scene& _scene)
 		: scene(_scene), detphMaps(_scene), idxImage(0), sem(1) {}
 
+	// 信号完整深度图滤波器
 	void SignalCompleteDepthmapFilter() {
 		ASSERT(idxImage > 0);
 		if (Thread::safeDec(idxImage) == 0)
@@ -1514,22 +1515,28 @@ struct DenseDepthMapData {
 
 static void* DenseReconstructionEstimateTmp(void*);
 static void* DenseReconstructionFilterTmp(void*);
+
+// DensifyPointCloud.cpp的主要算法
+// 利用块匹配将稀疏点云变为稠密点云
 bool Scene::DenseReconstruction()
 {
 	DenseDepthMapData data(*this);
 
 	{
 	// maps global view indices to our list of views to be processed
+	// 将全局视图索引映射到要处理的视图列表
 	IIndexArr imagesMap;
 
 	// prepare images for dense reconstruction (load if needed)
+	// 为密集重建准备图像（如果需要加载）
 	{
 		TD_TIMER_START();
-		data.images.Reserve(images.GetSize());
+		data.images.Reserve(images.GetSize());  // 申请空间
 		imagesMap.Resize(images.GetSize());
 		#ifdef DENSE_USE_OPENMP
 		bool bAbort(false);
-		#pragma omp parallel for shared(data, bAbort)
+		#pragma omp parallel for shared(data, bAbort)   // 对for循环进行并行
+		// 导入图像
 		for (int_t ID=0; ID<(int_t)images.GetSize(); ++ID) {
 			#pragma omp flush (bAbort)
 			if (bAbort)
@@ -1542,22 +1549,22 @@ bool Scene::DenseReconstruction()
 			Image& imageData = images[idxImage];
 			if (!imageData.IsValid()) {
 				#ifdef DENSE_USE_OPENMP
-				#pragma omp critical
+				#pragma omp critical    // 遇到if定义的情况时，限定以下的部分一次只用一个线程
 				#endif
 				imagesMap[idxImage] = NO_ID;
 				continue;
 			}
-			// map image index
+			// map image index 映射图像索引，即保存到数组当中
 			#ifdef DENSE_USE_OPENMP
-			#pragma omp critical
+			#pragma omp critical    // 遇到if定义的情况时，限定以下的部分一次只用一个线程
 			#endif
 			{
 				imagesMap[idxImage] = data.images.GetSize();
 				data.images.Insert(idxImage);
 			}
-			// reload image at the appropriate resolution
+			// reload image at the appropriate resolution 以适当的分辨率重新加载图像  重新计算最大分辨率
 			const unsigned nMaxResolution(imageData.RecomputeMaxResolution(OPTDENSE::nResolutionLevel, OPTDENSE::nMinResolution));
-			if (!imageData.ReloadImage(nMaxResolution)) {
+			if (!imageData.ReloadImage(nMaxResolution)) {   // 根据新的分辨率设置图片大小
 				#ifdef DENSE_USE_OPENMP
 				bAbort = true;
 				#pragma omp flush (bAbort)
@@ -1566,22 +1573,22 @@ bool Scene::DenseReconstruction()
 				return false;
 				#endif
 			}
-			imageData.UpdateCamera(platforms);
+			imageData.UpdateCamera(platforms);  // 因为图片的大小改变，重新计算相机的有关参数（内参矩阵）
 			// print image camera
-			DEBUG_ULTIMATE("K%d = \n%s", idxImage, cvMat2String(imageData.camera.K).c_str());
-			DEBUG_LEVEL(3, "R%d = \n%s", idxImage, cvMat2String(imageData.camera.R).c_str());
-			DEBUG_LEVEL(3, "C%d = \n%s", idxImage, cvMat2String(imageData.camera.C).c_str());
+			DEBUG_ULTIMATE("(libs/MVS/SceneDensify.cpp)K%d = \n%s", idxImage, cvMat2String(imageData.camera.K).c_str());
+			DEBUG_LEVEL(3, "(libs/MVS/SceneDensify.cpp)R%d = \n%s", idxImage, cvMat2String(imageData.camera.R).c_str());
+			DEBUG_LEVEL(3, "(libs/MVS/SceneDensify.cpp)C%d = \n%s", idxImage, cvMat2String(imageData.camera.C).c_str());
 		}
 		#ifdef DENSE_USE_OPENMP
 		if (bAbort || data.images.IsEmpty()) {
 		#else
 		if (data.images.IsEmpty()) {
 		#endif
-			VERBOSE("error: preparing images for dense reconstruction failed (errors loading images)");
+			VERBOSE("(libs/MVS/SceneDensify.cpp)error: preparing images for dense reconstruction failed (errors loading images)");
 			return false;
 		}
-		VERBOSE("Preparing images for dense reconstruction completed: %d images (%s)", images.GetSize(), TD_TIMER_GET_FMT().c_str());
-	}
+		VERBOSE("(libs/MVS/SceneDensify.cpp)Preparing images for dense reconstruction completed: %d images (%s)", images.GetSize(), TD_TIMER_GET_FMT().c_str());
+	    }
 
 	// select images to be used for dense reconstruction
 	{
@@ -1613,11 +1620,11 @@ bool Scene::DenseReconstruction()
 		}
 		// globally select a target view for each reference image
 		if (OPTDENSE::nNumViews == 1 && !data.detphMaps.SelectViews(data.images, imagesMap, data.neighborsMap)) {
-			VERBOSE("error: no valid images to be dense reconstructed");
+			VERBOSE("(libs/MVS/SceneDensify.cpp)error: no valid images to be dense reconstructed");
 			return false;
 		}
 		ASSERT(!data.images.IsEmpty());
-		VERBOSE("Selecting images for dense reconstruction completed: %d images (%s)", data.images.GetSize(), TD_TIMER_GET_FMT().c_str());
+		VERBOSE("(libs/MVS/SceneDensify.cpp)Selecting images for dense reconstruction completed: %d images (%s)", data.images.GetSize(), TD_TIMER_GET_FMT().c_str());
 	}
 	}
 
@@ -1692,7 +1699,7 @@ bool Scene::DenseReconstruction()
 				++nPoints3p;
 			}
 		}
-		VERBOSE("Dense point-cloud composed of:\n\t%u points with 1- views\n\t%u points with 2 views\n\t%u points with 3+ views", nPoints1m, nPoints2, nPoints3p);
+		VERBOSE("(libs/MVS/SceneDensify.cpp)Dense point-cloud composed of:\n\t%u points with 1- views\n\t%u points with 2 views\n\t%u points with 3+ views", nPoints1m, nPoints2, nPoints3p);
 	}
 	#endif
 

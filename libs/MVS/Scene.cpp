@@ -33,7 +33,9 @@
 #include "Scene.h"
 #define _USE_OPENCV
 #include "Interface.h"
+#include <iostream>
 
+using namespace std;
 using namespace MVS;
 
 
@@ -355,7 +357,18 @@ bool Scene::Load(const String& fileName, bool bImport)
 	// load project header ID
 	char szHeader[4];
 	fs.read(szHeader, 4);
-	if (!fs || _tcsncmp(szHeader, PROJECT_ID, 4) != 0) {
+	/*cout << szHeader << endl;
+	cout << PROJECT_ID << endl;
+	if (!fs)
+	{
+		cout << 1 << endl;
+	}
+	if (_tcsncmp(szHeader, PROJECT_ID, 4) != 0)
+	{
+		cout << 2 << endl;
+	}*/
+	if (!fs || _tcsncmp(szHeader, PROJECT_ID, 4) != 0) {	// 从openMVG的sfm_data.bin转换到openMVS的scene.mvs文件header是"MVSI"，即Interface.h类
+		//cout << 3 << endl;
 		fs.close();
 		if (bImport && Import(fileName))    // 从文件中获取
 			return true;
