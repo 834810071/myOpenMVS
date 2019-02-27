@@ -60,7 +60,7 @@ public:
 
 	unsigned nCalibratedImages; // number of valid images
 
-	unsigned nMaxThreads; // maximum number of threads used to distribute the work load
+	unsigned nMaxThreads; // maximum number of threads used to distribute the work load 用于分配工作负载的最大线程数
 
 public:
 	inline Scene(unsigned _nMaxThreads=0) : nMaxThreads(Thread::getMaxThreads(_nMaxThreads)) {}

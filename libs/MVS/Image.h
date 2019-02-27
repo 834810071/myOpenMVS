@@ -53,7 +53,7 @@ struct MVS_API ViewInfo {
 	uint32_t points; // number of 3D points shared with the reference image
 	float scale; // image scale relative to the reference image
 	float angle; // image angle relative to the reference image (radians)
-	float area; // common image area relative to the reference image (ratio)
+	float area; // common image area relative to the reference image (ratio) 相对于参考图像的公共图像区域（比率）
 
 	#ifdef _USE_BOOST
 				// implement BOOST serialization
