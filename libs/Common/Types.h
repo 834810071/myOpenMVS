@@ -575,11 +575,11 @@ typedef class GENERAL_API cList<double, double, 0>      DoubleArr;
 
 // M A C R O S /////////////////////////////////////////////////////
 
-#define FLOOR			SEACAVE::Floor2Int
+#define FLOOR			SEACAVE::Floor2Int	// 向下取整
 #define FLOOR2INT		SEACAVE::Floor2Int
-#define CEIL			SEACAVE::Ceil2Int
+#define CEIL			SEACAVE::Ceil2Int	// 向上取整
 #define CEIL2INT		SEACAVE::Ceil2Int
-#define ROUND			SEACAVE::Round2Int
+#define ROUND			SEACAVE::Round2Int	// 4舍5入
 #define ROUND2INT		SEACAVE::Round2Int
 #define SIN				std::sin
 #define ASIN			std::asin
