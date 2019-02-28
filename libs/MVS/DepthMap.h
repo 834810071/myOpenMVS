@@ -227,10 +227,10 @@ struct MVS_API DepthEstimator {
 	};
 
 	CLISTDEF0IDX(NeighborData,IIndex) neighborsData; // neighbor pixel depths to be used for smoothing
-	CLISTDEF0IDX(ImageRef,IIndex) neighbors; // neighbor pixels coordinates to be processed
+	CLISTDEF0IDX(ImageRef,IIndex) neighbors; // neighbor pixels coordinates to be processed 要处理的相邻像素坐标
 	volatile Thread::safe_t& idxPixel; // current image index to be processed
 	Vec3 X0;	      //
-	ImageRef x0;	  // constants during one pixel loop
+	ImageRef x0;	  // constants during one pixel loop 一个像素循环期间的常数
 	float normSq0;	  //
 	TexelVec texels0; //
 	#if DENSE_NCC == DENSE_NCC_DEFAULT
@@ -310,23 +310,19 @@ struct MVS_API DepthEstimator {
 		return normal.dot(viewRay) > 0 ? -normal : normal;
 	}
 
-	// encode/decode NCC score and refinement level in one float
-	static inline float EncodeScoreScale(float score, unsigned invScaleRange=0) {
+	// encode/decode NCC score and refinement level in one float 在一个浮动中编码/解码NCC分数和细化级别
+	static inline float EncodeScoreScale(float score, unsigned invScaleRange=0) {	// 编码
 		ASSERT(score >= 0.f && score <= 2.01f);
 		return score*0.1f+(float)invScaleRange;
 	}
+
 	static inline unsigned DecodeScale(float score) {
 		return (unsigned)FLOOR2INT(score);
 	}
-	static inline unsigned DecodeScoreScale(float& score) {
+	static inline unsigned DecodeScoreScale(float& score) {	// 解码
 		const unsigned invScaleRange(DecodeScale(score));
 		score = (score-(float)invScaleRange)*10.f;
-		//ASSERT(score >= 0.f && score <= 2.01f); //problems in multi-threading
 		return invScaleRange;
-	}
-	static inline float DecodeScore(float score) {
-		DecodeScoreScale(score);
-		return score;
 	}
 
 	// Encodes/decodes a normalized 3D vector in two parameters for the direction

@@ -104,33 +104,3 @@ cmake . ../openMVS -DCMAKE_BUILD_TYPE=Release -DVCG_ROOT="$main_path/vcglib"
 #Install OpenMVS library (optional):
 make -j2 && sudo make install
 ```
-
---------------------
-Mac OS X compilation
---------------------
-
-Install dependencies, run CMake and make.
-
-```
-#Install dependencies
-brew update
-brew tap homebrew/science
-brew install boost eigen opencv cgal ceres-solver
-main_path=`pwd`
-
-#VCGLib (Required)
-git clone https://github.com/cdcseacave/VCG.git vcglib
-
-#Getting the OpenMVS sources:
-git clone https://github.com/cdcseacave/openMVS.git
-
-#Build OpenMVS
-mkdir openMVS_build && cd openMVS_build
-cmake . ../openMVS -DCMAKE_BUILD_TYPE=Release -DVCG_DIR="$main_path/vcglib"
-
-#If you want to use OpenMVS as shared library, add to the CMake command:
--DBUILD_SHARED_LIBS=ON
-
-#Install OpenMVS library (optional):
-make && sudo make install
-```

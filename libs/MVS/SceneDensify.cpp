@@ -412,17 +412,17 @@ namespace CGAL {
 typedef CGAL::Simple_cartesian<double> kernel_t;
 typedef CGAL::Projection_traits_xy_3<kernel_t> Geometry;
 typedef CGAL::Delaunay_triangulation_2<Geometry> Delaunay;  // 2维三角网格
-typedef CGAL::Delaunay::Face_circulator FaceCirculator;
+typedef CGAL::Delaunay::Face_circulator FaceCirculator;		// 与给定顶点关联的所有面上的循环子
 typedef CGAL::Delaunay::Face_handle FaceHandle;
 typedef CGAL::Delaunay::Vertex_circulator VertexCirculator;
-typedef CGAL::Delaunay::Vertex_handle VertexHandle;
+typedef CGAL::Delaunay::Vertex_handle VertexHandle;			// Vertex_handle可以读取拓展的信息
 typedef kernel_t::Point_3 Point;
 }
 
 // triangulate in-view points, generating a 2D mesh
 // return also the estimated depth boundaries (min and max depth)
 // 对视图中的点进行三角剖分，生成二维网格
-// 同时返回估计深度边界（最小深度和最大深度）
+// 同时返回估计深度边界（最小深度和最大深度）  todo CGAL
 std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const Scene& scene, const DepthData::ViewData& image, const IndexArr& points)
 {
 	ASSERT(sizeof(Point3) == sizeof(X3D));
@@ -446,20 +446,21 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 		typedef CLISTDEF0(DepthDist) DepthDistArr;
 		typedef Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::InnerStride<2> > FloatMap;
 		// add the four image corners at the average depth 将平均深度处的四个图像角相加
-		const CGAL::VertexHandle vcorners[] = {
-			delaunay.insert(CGAL::Point(0, 0, image.pImageData->avgDepth)),
-			delaunay.insert(CGAL::Point(image.image.width(), 0, image.pImageData->avgDepth)),
-			delaunay.insert(CGAL::Point(0, image.image.height(), image.pImageData->avgDepth)),
-			delaunay.insert(CGAL::Point(image.image.width(), image.image.height(), image.pImageData->avgDepth))
+		const CGAL::VertexHandle vcorners[] = {	// 存储4个角的点坐标
+			delaunay.insert(CGAL::Point(0, 0, image.pImageData->avgDepth)),	// 左上角
+			delaunay.insert(CGAL::Point(image.image.width(), 0, image.pImageData->avgDepth)),	// 右上角
+			delaunay.insert(CGAL::Point(0, image.image.height(), image.pImageData->avgDepth)),	// 左下角
+			delaunay.insert(CGAL::Point(image.image.width(), image.image.height(), image.pImageData->avgDepth))	// 右下角
 		};
 		// compute average depth from the closest 3 directly connected faces,
 		// weighted by the distance
+		// 计算最近的3个直接连接面的平均深度，以距离加权
 		const size_t numPoints = 3;
 		for (int i=0; i<4; ++i) {
 			const CGAL::VertexHandle vcorner = vcorners[i];
-			CGAL::FaceCirculator cfc(delaunay.incident_faces(vcorner));
+			CGAL::FaceCirculator cfc(delaunay.incident_faces(vcorner)); // 入射面
 			if (cfc == 0)
-				continue; // normally this should never happen
+				continue; // 正常情况下不应该发生
 			const CGAL::FaceCirculator done(cfc);
 			Point3d& poszA = (Point3d&)vcorner->point();
 			const Point2d& posA = reinterpret_cast<const Point2d&>(poszA);
@@ -467,13 +468,14 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 			DepthDistArr depths(0, numPoints);
 			do {
 				CGAL::FaceHandle fc(cfc->neighbor(cfc->index(vcorner)));
-				if (fc == delaunay.infinite_face())
+				if (fc == delaunay.infinite_face())	// 与无限顶点关联的面
 					continue;
 				for (int j=0; j<4; ++j)
 					if (fc->has_vertex(vcorners[j]))
 						goto Continue;
 				// compute the depth as the intersection of the corner ray with
 				// the plane defined by the face's vertices
+				// 将深度计算为角射线与面顶点定义的平面的交点
 				{
 				const Point3d& poszB0 = (const Point3d&)fc->vertex(0)->point();
 				const Point3d& poszB1 = (const Point3d&)fc->vertex(1)->point();
@@ -516,11 +518,11 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 
 	// triangulate in-view points 三角剖分视图中的点
 	CGAL::Delaunay delaunay;    // 2维三角网格
-	const std::pair<float,float> thDepth(TriangulatePointsDelaunay(delaunay, scene, image, depthData.points));
+	const std::pair<float,float> thDepth(TriangulatePointsDelaunay(delaunay, scene, image, depthData.points));	// [大， 小]
 	depthData.dMin = thDepth.first*0.9f;
 	depthData.dMax = thDepth.second*1.1f;
 
-	// create rough depth-map by interpolating inside triangles
+	// create rough depth-map by interpolating inside triangles 通过内插三角形创建粗略深度图
 	const Camera& camera = image.camera;
 	depthData.depthMap.create(image.image.size());
 	depthData.normalMap.create(image.image.size());
@@ -528,7 +530,7 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 		depthData.depthMap.setTo(Depth(0));
 		depthData.normalMap.setTo(0.f);
 	}
-	struct RasterDepthDataPlaneData {
+	struct RasterDepthDataPlaneData { // 光栅深度数据
 		const Camera& P;
 		DepthMap& depthMap;
 		NormalMap& normalMap;
@@ -537,27 +539,30 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 		inline void operator()(const ImageRef& pt) {
 			if (!depthMap.isInside(pt))
 				return;
-			const float z(INVERT(normalPlane.dot(P.TransformPointI2C(Point2f(pt)))));
+			const float z(INVERT(normalPlane.dot(P.TransformPointI2C(Point2f(pt)))));	// 倒置 （）
 			ASSERT(z > 0);
 			depthMap(pt) = z;
 			normalMap(pt) = normal;
 		}
 	};
 	RasterDepthDataPlaneData data = {camera, depthData.depthMap, depthData.normalMap};
+	// 便利二维三角网格
 	for (CGAL::Delaunay::Face_iterator it=delaunay.faces_begin(); it!=delaunay.faces_end(); ++it) {
 		const CGAL::Delaunay::Face& face = *it;
+		// 三角网格的三个点
 		const Point3f i0((const Point3&)face.vertex(0)->point());
 		const Point3f i1((const Point3&)face.vertex(1)->point());
 		const Point3f i2((const Point3&)face.vertex(2)->point());
-		// compute the plane defined by the 3 points
+		// 计算由3个点定义的平面
 		const Point3f c0(camera.TransformPointI2C(i0));
 		const Point3f c1(camera.TransformPointI2C(i1));
 		const Point3f c2(camera.TransformPointI2C(i2));
 		const Point3f edge1(c1-c0);
 		const Point3f edge2(c2-c0);
-		data.normal = normalized(edge2.cross(edge1));
-		data.normalPlane = data.normal * INVERT(data.normal.dot(c0));
+		data.normal = normalized(edge2.cross(edge1));	// 法线
+		data.normalPlane = data.normal * INVERT(data.normal.dot(c0));	// 法平面
 		// draw triangle and for each pixel compute depth as the ray intersection with the plane
+		// 绘制三角形，并为每个像素计算深度作为光线与平面的交点。
 		Image8U::RasterizeTriangle(reinterpret_cast<const Point2f&>(i2), reinterpret_cast<const Point2f&>(i1), reinterpret_cast<const Point2f&>(i0), data);
 	}
 
@@ -568,34 +573,37 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 
 
 // initialize the confidence map (NCC score map) with the score of the current estimates
+// 用当前估计的分数初始化置信度映射（NCC分数映射）
 void* STCALL DepthMapsData::ScoreDepthMapTmp(void* arg)
 {
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
 	IDX idx;
-	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize()) {
-		const ImageRef& x = estimator.coords[idx];
+	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize()) { // 存在置信度都进行遍历
+		const ImageRef& x = estimator.coords[idx];	// 参考图像索引
+		// 将给定大小的补片居中放置在线段上      获取主图像中的补丁像素值
 		if (!estimator.PreparePixelPatch(x) || !estimator.FillPixelPatch()) {
 			estimator.depthMap0(x) = 0;
 			estimator.normalMap0(x) = Normal::ZERO;
 			estimator.confMap0(x) = DepthEstimator::EncodeScoreScale(2.f);
 			continue;
 		}
+
 		Depth& depth = estimator.depthMap0(x);
 		Normal& normal = estimator.normalMap0(x);
-		const Normal viewDir(Cast<float>(static_cast<const Point3&>(estimator.X0)));
+		const Normal viewDir(Cast<float>(static_cast<const Point3&>(estimator.X0)));	// 法线 ???
 		if (depth <= 0) {
-			// init with random values
+			// init with random values 随机数初始化
 			depth = DepthEstimator::RandomDepth(estimator.dMin, estimator.dMax);
 			normal = DepthEstimator::RandomNormal(viewDir);
 		} else if (normal.dot(viewDir) >= 0) {
-			// replace invalid normal with random values
+			// replace invalid normal with random values 用随机值替换无效的法线
 			normal = DepthEstimator::RandomNormal(viewDir);
 		}
-		estimator.confMap0(x) = DepthEstimator::EncodeScoreScale(estimator.ScorePixel(depth, normal));
+		estimator.confMap0(x) = DepthEstimator::EncodeScoreScale(estimator.ScorePixel(depth, normal));	// 计算NCC分数
 	}
 	return NULL;
 }
-// run propagation and random refinement cycles
+// run propagation and random refinement cycles 游程传播和随机精化循环
 void* STCALL DepthMapsData::EstimateDepthMapTmp(void* arg)
 {
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
@@ -604,7 +612,7 @@ void* STCALL DepthMapsData::EstimateDepthMapTmp(void* arg)
 		estimator.ProcessPixel(idx);
 	return NULL;
 }
-// remove all estimates with too big score and invert confidence map
+// remove all estimates with too big score and invert confidence map 删除分数太大的所有估计并反转置信度映射
 void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 {
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
@@ -615,12 +623,13 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 		Depth& depth = estimator.depthMap0(x);
 		Normal& normal = estimator.normalMap0(x);
 		float& conf = estimator.confMap0(x);
-		const unsigned invScaleRange(DepthEstimator::DecodeScoreScale(conf));
+		const unsigned invScaleRange(DepthEstimator::DecodeScoreScale(conf));	// 解码置信分数
 		ASSERT(depth >= 0);
 		// check if the score is good enough
 		// and that the cross-estimates is close enough to the current estimate
-		if (conf > OPTDENSE::fNCCThresholdKeep) {
-			#if 1 // used if gap-interpolation is active
+		// 检查分数是否足够好，交叉估计是否与当前估计足够接近
+		if (conf > OPTDENSE::fNCCThresholdKeep) {	// 最大1 - 比较接受的NCC分数
+			#if 1 // used if gap-interpolation is active	如果间隙插值有效，则使用
 			conf = 0;
 			normal = Normal::ZERO;
 			#endif
@@ -723,8 +732,8 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		// compute rough estimates using the sparse point-cloud 使用稀疏点云计算粗略估计
 		InitDepthMap(depthData);
 		#if TD_VERBOSE != TD_VERBOSE_OFF
-		// save rough depth map as image
-		if (g_nVerbosityLevel > 4) {
+		// save rough depth map as image 没有使用过
+		if (g_nVerbosityLevel > 4) {  // 冗长程度
 			ExportDepthMap(ComposeDepthFilePath(idxImage, "init.png"), depthData.depthMap);
 			ExportNormalMap(ComposeDepthFilePath(idxImage, "init.normal.png"), depthData.normalMap);
 			ExportPointCloud(ComposeDepthFilePath(idxImage, "init.ply"), *depthData.images.First().pImageData, depthData.depthMap, depthData.normalMap);
@@ -733,12 +742,13 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	}
 
 	// init integral images and index to image-ref map for the reference data
+	// 初始化引用数据的图像 引用映射的整数图像和索引
 	Image64F imageSum0;
-	cv::integral(image.image, imageSum0, CV_64F);
+	cv::integral(image.image, imageSum0, CV_64F);	// 计算积分图像
 	if (prevDepthMapSize != size) {
 		prevDepthMapSize = size;
 		BitMatrix mask;
-		DepthEstimator::MapMatrix2ZigzagIdx(size, coords, mask, MAXF(64,(int)nMaxThreads*8));
+		DepthEstimator::MapMatrix2ZigzagIdx(size, coords, mask, MAXF(64,(int)nMaxThreads*8));	// 队列变为矩阵
 	}
 
 	// init threads
@@ -751,6 +761,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	volatile Thread::safe_t idxPixel;
 
 	// initialize the reference confidence map (NCC score map) with the score of the current estimates
+	// 用当前估计的分数初始化参考置信度映射（NCC分数映射）
 	{
 		// create working threads
 		idxPixel = -1;
@@ -766,7 +777,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 			pThread->join();
 		estimators.Release();
 		#if TD_VERBOSE != TD_VERBOSE_OFF
-		// save rough depth map as image
+		// save rough depth map as image 没有用
 		if (g_nVerbosityLevel > 4) {
 			ExportDepthMap(ComposeDepthFilePath(idxImage, "rough.png"), depthData.depthMap);
 			ExportNormalMap(ComposeDepthFilePath(idxImage, "rough.normal.png"), depthData.normalMap);
@@ -775,7 +786,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		#endif
 	}
 
-	// run propagation and random refinement cycles on the reference data
+	// run propagation and random refinement cycles on the reference data 参考数据上的运行传播和随机精化循环
 	for (unsigned iter=0; iter<OPTDENSE::nEstimationIters; ++iter) {
 		// create working threads
 		const DepthEstimator::ENDIRECTION dir((DepthEstimator::ENDIRECTION)(iter%DepthEstimator::DIRS));
@@ -787,12 +798,12 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		FOREACH(i, threads)
 			threads[i].start(EstimateDepthMapTmp, &estimators[i]);
 		EstimateDepthMapTmp(&estimators.Last());
-		// wait for the working threads to close
+		// 等待所有线程执行结束
 		FOREACHPTR(pThread, threads)
 			pThread->join();
 		estimators.Release();
 		#if 1 && TD_VERBOSE != TD_VERBOSE_OFF
-		// save intermediate depth map as image
+		// save intermediate depth map as image  没用
 		if (g_nVerbosityLevel > 4) {
 			const String path(ComposeDepthFilePath(image.pImageData-scene.images.Begin(), "iter")+String::ToString(iter));
 			ExportDepthMap(path+".png", depthData.depthMap);
@@ -802,7 +813,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		#endif
 	}
 
-	// remove all estimates with too big score and invert confidence map
+	// remove all estimates with too big score and invert confidence map 删除分数太大的所有估计并反转置信度映射
 	{
 		// create working threads
 		idxPixel = -1;
@@ -813,13 +824,13 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		FOREACH(i, threads)
 			threads[i].start(EndDepthMapTmp, &estimators[i]);
 		EndDepthMapTmp(&estimators.Last());
-		// wait for the working threads to close
+		// 等待所有线程执行完毕
 		FOREACHPTR(pThread, threads)
 			pThread->join();
 		estimators.Release();
 	}
 
-	DEBUG_EXTRA("Depth-map for image %3u %s: %dx%d (%s)", image.pImageData-scene.images.Begin(),
+	DEBUG_EXTRA("(libs/MVS/SceneDensify.cpp)Depth-map for image %3u %s: %dx%d (%s)", image.pImageData-scene.images.Begin(),
 		depthData.images.GetSize() > 2 ?
 			String::FormatString("estimated using %2u images", depthData.images.GetSize()-1).c_str() :
 			String::FormatString("with image %3u estimated", depthData.images[1].pImageData-scene.images.Begin()).c_str(),
@@ -1811,12 +1822,12 @@ void Scene::DenseReconstructionEstimate(void* pData)
 			// extract depth map
 			data.sem.Wait();
 			data.detphMaps.EstimateDepthMap(data.images[evtImage.idxImage]);    // 估计深度图
-			data.sem.Signal();
+			data.sem.Signal();	// 多线程
 			if (OPTDENSE::nOptimize & OPTDENSE::OPTIMIZE) {
-				// optimize depth-map
+				// optimize depth-map	优化深度图
 				data.events.AddEventFirst(new EVTOptimizeDepthMap(evtImage.idxImage));
 			} else {
-				// save depth-map
+				// save depth-map	保存深度图
 				data.events.AddEventFirst(new EVTSaveDepthMap(evtImage.idxImage));
 			}
 			break; }

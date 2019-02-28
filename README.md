@@ -19,11 +19,3 @@ Automatic Windows x64 binary builds can be found for each commit on its Appveyor
 ## Example
 
 See the usage [example](https://github.com/cdcseacave/openMVS/wiki/Usage) wiki page.
-
-## License
-
-See the [copyright](https://github.com/cdcseacave/openMVS/blob/master/COPYRIGHT.md) file.
-
-## Contact
-
-openmvs[AT]googlegroups.com

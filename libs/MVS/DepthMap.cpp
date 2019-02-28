@@ -285,14 +285,14 @@ DepthEstimator::DepthEstimator(DepthData& _depthData0, volatile Thread::safe_t& 
 	ASSERT(_depthData0.images.size() >= 2);
 }
 
-// center a patch of given size on the segment
+// center a patch of given size on the segment 将给定大小的补片居中放置在线段上
 bool DepthEstimator::PreparePixelPatch(const ImageRef& x)
 {
 	x0 = x;
 	return image0.image.isInside(ImageRef(x.x-nSizeHalfWindow, x.y-nSizeHalfWindow)) &&
 	       image0.image.isInside(ImageRef(x.x+nSizeHalfWindow, x.y+nSizeHalfWindow));
 }
-// fetch the patch pixel values in the main image
+// fetch the patch pixel values in the main image 获取主图像中的补丁像素值
 bool DepthEstimator::FillPixelPatch()
 {
 	const float mean(GetImage0Sum(x0)/nTexels);
@@ -305,7 +305,7 @@ bool DepthEstimator::FillPixelPatch()
 	return normSq0 > thMagnitudeSq;
 }
 
-// compute pixel's NCC score
+// compute pixel's NCC score  计算NCC分数
 float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 {
 	ASSERT(depth > 0 && normal.dot(Cast<float>(static_cast<const Point3&>(X0))) < 0);
@@ -377,21 +377,24 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 
 // run propagation and random refinement cycles;
 // the solution belonging to the target image can be also propagated
+// 运行传播和随机细化循环；
+// 还可以传播属于目标映像的解决方案
 void DepthEstimator::ProcessPixel(IDX idx)
 {
-	// compute pixel coordinates from pixel index and its neighbors
-	ASSERT(dir == LT2RB || dir == RB2LT);
+	// compute pixel coordinates from pixel index and its neighbors 从像素索引及其邻居计算像素坐标
+	ASSERT(dir == LT2RB || dir == RB2LT);	// L left T top R right B bottom
 	if (!PreparePixelPatch(dir == LT2RB ? coords[idx] : coords[coords.GetSize()-1-idx]))
 		return;
 
-	float& conf = confMap0(x0);
-	unsigned invScaleRange(DecodeScoreScale(conf));
+	float& conf = confMap0(x0);	// x0 一个像素循环期间的常数 	confidence map
+	unsigned invScaleRange(DecodeScoreScale(conf));	// 解码NCC分数
+	// fNCCThresholdRefine 1-不再细化匹配的NCC分数                        填充像素贴片
 	if ((invScaleRange <= 2 || conf > OPTDENSE::fNCCThresholdRefine) && FillPixelPatch()) {
-		// find neighbors
+		// find neighbors 查找邻居
 		neighbors.Empty();
 		neighborsData.Empty();
 		if (dir == LT2RB) {
-			// direction from left-top to right-bottom corner
+			// 从左上角到右下角的方向   nSizeHalfWindow - 3 n半窗口大小
 			if (x0.x > nSizeHalfWindow) {
 				const ImageRef nx(x0.x-1, x0.y);
 				const Depth ndepth(depthMap0(nx));
@@ -422,7 +425,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 			}
 		} else {
 			ASSERT(dir == RB2LT);
-			// direction from right-bottom to left-top corner
+			// 从右下角到左上角的方向
 			if (x0.x < size.width-nSizeHalfWindow) {
 				const ImageRef nx(x0.x+1, x0.y);
 				const Depth ndepth(depthMap0(nx));
@@ -456,7 +459,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		Normal& normal = normalMap0(x0);
 		const Normal viewDir(Cast<float>(static_cast<const Point3&>(X0)));
 		ASSERT(depth > 0 && normal.dot(viewDir) < 0);
-		// check if any of the neighbor estimates are better then the current estimate
+		// check if any of the neighbor estimates are better then the current estimate 检查是否有任何邻居估计值比当前估计值更好
 		FOREACH(n, neighbors) {
 			float nconf(confMap0(neighbors[n]));
 			const unsigned ninvScaleRange(DecodeScoreScale(nconf));
@@ -476,6 +479,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 			}
 		}
 		// check few random solutions close to the current estimate in an attempt to find a better estimate
+		// 检查几个接近当前估计值的随机解决方案，试图找到更好的估计值
 		float depthRange(MaxDepthDifference(depth, OPTDENSE::fRandomDepthRatio));
 		if (invScaleRange > OPTDENSE::nRandomMaxScale)
 			invScaleRange = OPTDENSE::nRandomMaxScale;

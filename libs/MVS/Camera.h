@@ -281,7 +281,7 @@ public:
 			TYPE((x.y-K(1,2))/K(1,1)),
 			TYPE(1) );
 	}
-	// un-project from image pixel coords to the camera space
+	// un-project from image pixel coords to the camera space 从图像像素坐标到相机空间的投影
 	template <typename TYPE>
 	inline TPoint3<TYPE> TransformPointI2C(const TPoint3<TYPE>& X) const {
 		return TPoint3<TYPE>(
