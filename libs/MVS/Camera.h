@@ -312,7 +312,7 @@ public:
 		return ray;
 	}
 
-	// project from the camera z=1 plane to image pixels
+	// project from the camera z=1 plane to image pixels 从照相机Z=1平面投影到图像像素
 	template <typename TYPE>
 	inline TPoint2<TYPE> TransformPointC2I(const TPoint2<TYPE>& x) const {
 		return TPoint2<TYPE>(

@@ -427,24 +427,25 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 {
 	ASSERT(sizeof(Point3) == sizeof(X3D));
 	ASSERT(sizeof(Point3) == sizeof(CGAL::Point));
-	std::pair<float,float> depthBounds(FLT_MAX, 0.f);
-	FOREACH(p, points) {
-		const PointCloud::Point& point = scene.pointcloud.points[points[p]];
-		const Point3 ptCam(image.camera.TransformPointW2C(Cast<REAL>(point)));
-		const Point2 ptImg(image.camera.TransformPointC2I(ptCam));
-		delaunay.insert(CGAL::Point(ptImg.x, ptImg.y, ptCam.z));
-		const Depth depth((float)ptCam.z);
+	std::pair<float,float> depthBounds(FLT_MAX, 0.f); // 深度范围 [最大范围， 最小范围]
+	// 便利点
+	FOREACH(p, points) {    // points里存放的是索引
+		const PointCloud::Point& point = scene.pointcloud.points[points[p]];    // 取出scene类中点云中的点
+		const Point3 ptCam(image.camera.TransformPointW2C(Cast<REAL>(point)));  // 转换为相机坐标系中  R * (X - C)
+		const Point2 ptImg(image.camera.TransformPointC2I(ptCam));              // 相机坐标系转换为像素 [TYPE(K(0,2)+K(0,0)*x.x),TYPE(K(1,2)+K(1,1)*x.y)]
+		delaunay.insert(CGAL::Point(ptImg.x, ptImg.y, ptCam.z));                // 三角网格
+		const Depth depth((float)ptCam.z);                                      // 深度图
 		if (depthBounds.first > depth)
 			depthBounds.first = depth;
 		if (depthBounds.second < depth)
 			depthBounds.second = depth;
 	}
-	// if full size depth-map requested
+	// if full size depth-map requested 如果请求全尺寸深度图
 	if (OPTDENSE::bAddCorners) {
-		typedef TIndexScore<float,float> DepthDist;
+		typedef TIndexScore<float,float> DepthDist;	// 深度距离（作为评分）
 		typedef CLISTDEF0(DepthDist) DepthDistArr;
 		typedef Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::InnerStride<2> > FloatMap;
-		// add the four image corners at the average depth
+		// add the four image corners at the average depth 将平均深度处的四个图像角相加
 		const CGAL::VertexHandle vcorners[] = {
 			delaunay.insert(CGAL::Point(0, 0, image.pImageData->avgDepth)),
 			delaunay.insert(CGAL::Point(image.image.width(), 0, image.pImageData->avgDepth)),
