@@ -78,7 +78,7 @@ public:
 	uint32_t platformID; // ID of the associated platform
 	uint32_t cameraID; // ID of the associated camera on the associated platform
 	uint32_t poseID; // ID of the pose of the associated platform
-	String name; // image file name (relative path)
+	String name; // image file name (relative path)	相对路径
 	Camera camera; // view's pose
 	uint32_t width, height; // image size
 	Image8U3 image; // image color pixels

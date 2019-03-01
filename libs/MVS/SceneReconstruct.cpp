@@ -193,7 +193,9 @@ protected:
 // S T R U C T S ///////////////////////////////////////////////////
 
 // construct the mesh out of the dense point cloud using Delaunay tetrahedralization & graph-cut method
-// see "Exploiting Visibility Information in Surface Reconstruction to Preserve Weakly Supported Surfaces", Jancosek and Pajdla, 2015
+// see "Exploiting Visibility Information in Surface Reconstruction to Preserve Weakly Supported Surfaces", Jancosek and Pajdla, 2015  02
+// 用Delaunay四面体化&图割法从稠密点云中构造网格
+// 参见“利用表面重建中的可见性信息来保护弱支撑表面”，Jancosek和Pajdla，2015年。
 namespace DELAUNAY {
 typedef CGAL::Exact_predicates_inexact_constructions_kernel kernel_t;
 typedef kernel_t::Point_3 point_t;
@@ -755,6 +757,10 @@ float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 // Next, the score is computed for all the edges of the directed graph composed of points as vertices.
 // Finally, graph-cut algorithm is used to split the tetrahedrons in inside and outside,
 // and the surface is such extracted.
+
+// 首先，如果要插入的点 不比其 至少一个视图中的distinsert像素更接近任何已插入点的投影，则通过逐点插入来迭代创建现有点云的Delaunay三角剖分。
+// 接下来，计算由作为顶点的点组成的有向图的所有边的分数。
+// 最后，采用 图割算法 对四面体内外表面进行剖分，提取出相应的曲面。
 bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigned nItersFixNonManifold,
 							float kSigma, float kQual, float kb,
 							float kf, float kRel, float kAbs, float kOutl,

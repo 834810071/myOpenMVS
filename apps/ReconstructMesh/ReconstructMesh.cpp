@@ -1,32 +1,5 @@
 /*
  * ReconstructMesh.cpp
- *
- * Copyright (c) 2014-2015 SEACAVE
- *
- * Author(s):
- *
- *      cDc <cdc.seacave@gmail.com>
- *
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- *
- * Additional Terms:
- *
- *      You are required to preserve legal notices and author attributions in
- *      that material or in the Appropriate Legal Notices displayed by works
- *      containing it.
  */
 
 #include "../../libs/MVS/Common.h"
@@ -219,21 +192,22 @@ int main(int argc, LPCTSTR* argv)
 	// load project
 	if (!scene.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))
 		return EXIT_FAILURE;
-	if (OPT::bMeshExport) {
-		// check there is a mesh to export
+	if (OPT::bMeshExport) {	// 只导出加载项目中包含的网格  默认false  假如存在网格，直接保存
+		// check there is a mesh to export 检查是否有要导出的网格
 		if (scene.mesh.IsEmpty())
 			return EXIT_FAILURE;
-		// save mesh
+		// save mesh 保存网格
 		const String fileName(MAKE_PATH_SAFE(OPT::strOutputFileName));
 		scene.mesh.Save(fileName);
 		#if TD_VERBOSE != TD_VERBOSE_OFF
 		if (VERBOSITY_LEVEL > 2)
 			scene.ExportCamerasMLP(Util::getFileFullName(OPT::strOutputFileName)+_T(".mlp"), fileName);
 		#endif
-	} else {
-		if (OPT::strMeshFileName.IsEmpty()) {
+	} else {	// 构建网格
+		if (OPT::strMeshFileName.IsEmpty()) {	// 要清理的网格文件名（跳过重建步骤）  如果网格文件名为空
 			// reset image resolution to the original size and
 			// make sure the image neighbors are initialized before deleting the point-cloud
+			// 将图像分辨率重置为原始大小，并确保在删除点云之前初始化了图像邻居
 			#ifdef RECMESH_USE_OPENMP
 			bool bAbort(false);
 			#pragma omp parallel for
@@ -248,8 +222,8 @@ int main(int argc, LPCTSTR* argv)
 				Image& imageData = scene.images[idxImage];
 				if (!imageData.IsValid())
 					continue;
-				// reset image resolution
-				if (!imageData.ReloadImage(0, false)) {
+				// reset image resolution 重设图像分辨率
+				if (!imageData.ReloadImage(0, false)) {	// 重新加载图像
 					#ifdef RECMESH_USE_OPENMP
 					bAbort = true;
 					#pragma omp flush (bAbort)
@@ -258,8 +232,8 @@ int main(int argc, LPCTSTR* argv)
 					return EXIT_FAILURE;
 					#endif
 				}
-				imageData.UpdateCamera(scene.platforms);
-				// select neighbor views
+				imageData.UpdateCamera(scene.platforms);	// 从归一化变为非归一化并计算投影矩阵 因为图片的像素大小改变了
+				// select neighbor views 查找邻居视图
 				if (imageData.neighbors.IsEmpty()) {
 					IndexArr points;
 					scene.SelectNeighborViews(idxImage, points);
@@ -269,10 +243,15 @@ int main(int argc, LPCTSTR* argv)
 			if (bAbort)
 				return EXIT_FAILURE;
 			#endif
-			// reconstruct a coarse mesh from the given point-cloud
+			// reconstruct a coarse mesh from the given point-cloud 由给定点云重构粗网格
 			TD_TIMER_START();
-			if (OPT::bUseConstantWeight)
+			if (OPT::bUseConstantWeight)	// 考虑所有视图权重1，而不是可用权重 默认为true
 				scene.pointcloud.pointWeights.Release();
+			// 正文 算法
+			// 两个3D点的投影之间的最小距离（以像素为单位），以便在三角测量时考虑它们的不同（0-禁用） 2.5f
+			// 利用自由空间支持重构弱表示曲面  false
+			// 调整能见度加权时考虑的最小厚度的乘数  1.f
+			// 图切割中质量权重的乘子调整 1.f
 			if (!scene.ReconstructMesh(OPT::fDistInsert, OPT::bUseFreeSpaceSupport, 4, OPT::fThicknessFactor, OPT::fQualityFactor))
 				return EXIT_FAILURE;
 			VERBOSE("Mesh reconstruction completed: %u vertices, %u faces (%s)", scene.mesh.vertices.GetSize(), scene.mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
@@ -283,7 +262,7 @@ int main(int argc, LPCTSTR* argv)
 			}
 			#endif
 		} else {
-			// load existing mesh to clean
+			// load existing mesh to clean		加载存在的网格文件清理它
 			scene.mesh.Load(MAKE_PATH_SAFE(OPT::strMeshFileName));
 		}
 

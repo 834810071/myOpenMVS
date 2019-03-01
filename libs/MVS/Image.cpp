@@ -111,7 +111,7 @@ bool Image::LoadImage(const String& fileName, unsigned nMaxResolution)
 } // LoadImage
 /*----------------------------------------------------------------*/
 
-// open the stored image file name and read again the image data
+// open the stored image file name and read again the image data 打开存储的图像文件名并再次读取图像数据
 bool Image::ReloadImage(unsigned nMaxResolution, bool bLoadPixels)
 {
 	IMAGEPTR pImage(bLoadPixels ? ReadImage(name, image) : ReadImageHeader(name));  // 根据是否加载像素判断是读取图像还是读取图像头文件
