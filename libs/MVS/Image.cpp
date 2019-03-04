@@ -178,7 +178,6 @@ unsigned Image::RecomputeMaxResolution(unsigned& level, unsigned minImageSize) c
 /*----------------------------------------------------------------*/
 
 
-// compute the camera extrinsics from the platform pose and the relative camera pose to the platform
 // 从平台姿态和相对于平台的相机姿态计算相机外物
 // 从归一化变为非归一化并计算投影矩阵
 Camera Image::GetCamera(const PlatformArr& platforms, const Image8U::Size& resolution) const
@@ -187,11 +186,11 @@ Camera Image::GetCamera(const PlatformArr& platforms, const Image8U::Size& resol
 	ASSERT(cameraID != NO_ID);
 	ASSERT(poseID != NO_ID);
 
-	// compute the normalized absolute camera pose 计算归一化绝对相机姿态
+	// 计算归一化绝对相机姿态
 	const Platform& platform = platforms[platformID];
-	Camera camera(platform.GetCamera(cameraID, poseID));
+	Camera camera(platform.GetCamera(cameraID, poseID));	// 返回归一化绝对相机姿态
 
-	// compute the unnormalized camera	计算非归一化的相机姿态
+	// 计算非归一化的相机姿态
 	camera.K = camera.GetK<REAL>(resolution.width, resolution.height);
 	camera.ComposeP();	// 计算投影矩阵
 

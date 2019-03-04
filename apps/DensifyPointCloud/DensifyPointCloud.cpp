@@ -183,37 +183,44 @@ int main(int argc, LPCTSTR* argv)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);// | _CRTDBG_CHECK_ALWAYS_DF);
 	#endif
 
+	// 初始化
 	if (!Initialize(argc, argv))
 		return EXIT_FAILURE;
 
 	Scene scene(OPT::nMaxThreads);
-    // (0 — 禁用， <0 — 点数， >0 — 每平方单位的样本密度） TODO  没用???
+
+	/*// (0 - 禁用， <0 - 点数， >0 - 每平方单位的样本密度） TODO  没用  0
 	if (OPT::fSampleMesh != 0) {	// 均匀采样网格上的点
+	    cout << 1 << endl;
 		// sample input mesh and export the obtained point-cloud	采样输入网格并导出获得的点云
 		if (!scene.mesh.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))    // 从obj或者ply文件中导入网格
 			return EXIT_FAILURE;
 		TD_TIMER_START();
 		PointCloud pointcloud;
-		if (OPT::fSampleMesh > 0)
-			scene.mesh.SamplePoints(OPT::fSampleMesh, 0, pointcloud);
-		else
-			scene.mesh.SamplePoints((unsigned)ROUND2INT(-OPT::fSampleMesh), pointcloud);
+		if (OPT::fSampleMesh > 0) {
+            cout << 2 << endl;
+            scene.mesh.SamplePoints(OPT::fSampleMesh, 0, pointcloud);
+        }
+		else {
+            cout << 3 << endl;
+            scene.mesh.SamplePoints((unsigned) ROUND2INT(-OPT::fSampleMesh), pointcloud);
+        }
 		VERBOSE("(apps/DensifyPointCloud/DensifyPointCloud.cpp)Sample mesh completed: %u points (%s)", pointcloud.GetSize(), TD_TIMER_GET_FMT().c_str());
 		pointcloud.Save(MAKE_PATH_SAFE(Util::getFileFullName(OPT::strOutputFileName))+_T(".ply"));
 		Finalize();
 		return EXIT_SUCCESS;
-	}
+	}*/
 
-	// load and estimate a dense point-cloud 加载并估计密集点云
+	// 加载并估计稠密点云
 	if (!scene.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))	// 初始化scene类
 		return EXIT_FAILURE;
-	if (scene.pointcloud.IsEmpty()) {	// 点云不能为空
+	if (scene.pointcloud.IsEmpty()) {	// 点云不能为空，确保存在稀疏点云
 		VERBOSE("(apps/DensifyPointCloud/DensifyPointCloud.cpp)error: empty initial point-cloud");
 		return EXIT_FAILURE;
 	}
 
 	// 正文 算法
-	// nArchiveType project archive type: 0-text, 1-binary, 2-compressed binary
+	// nArchiveType project archive type: 0-text, 1-binary, 2-compressed binary  项目存档类型
 	// ARCHIVE_MVS -1
 	// cout << (ARCHIVE_TYPE)OPT::nArchiveType << endl;  // 2
 	if ((ARCHIVE_TYPE)OPT::nArchiveType != ARCHIVE_MVS) {
@@ -223,7 +230,7 @@ int main(int argc, LPCTSTR* argv)
 		VERBOSE("(apps/DensifyPointCloud/DensifyPointCloud.cpp)Densifying point-cloud completed: %u points (%s)", scene.pointcloud.GetSize(), TD_TIMER_GET_FMT().c_str());
 	}
 
-	// save the final mesh 保存最终网格
+	// 保存最终网格
 	const String baseFileName(MAKE_PATH_SAFE(Util::getFileFullName(OPT::strOutputFileName)));
 	scene.Save(baseFileName+_T(".mvs"), (ARCHIVE_TYPE)OPT::nArchiveType);
 	scene.pointcloud.Save(baseFileName+_T(".ply"));

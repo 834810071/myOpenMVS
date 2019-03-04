@@ -46,6 +46,7 @@ namespace MVS {
 // a point-cloud containing the points with the corresponding views
 // and optionally weights, normals and colors
 // (same size as the number of points or zero)
+// 包含具有相应视图的点以及可选的权重、法线和颜色（大小与点数相同或为零）的点云
 class MVS_API PointCloud
 {
 public:

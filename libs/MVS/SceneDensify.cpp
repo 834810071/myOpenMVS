@@ -121,7 +121,7 @@ public:
 
 // S T R U C T S ///////////////////////////////////////////////////
 
-// structure used to compute all depth-maps 计算深度映射
+// 用于计算所有深度图的  计算深度映射
 class DepthMapsData
 {
 public:
@@ -172,25 +172,17 @@ DepthMapsData::~DepthMapsData()
 /*----------------------------------------------------------------*/
 
 
-// globally choose the best target view for each image,
-// trying in the same time the selected image pairs to cover the whole scene;
-// the map of selected neighbors for each image is returned in neighborsMap.
-// For each view a list of neighbor views ordered by number of shared sparse points and overlapped image area is given.
-// Next a graph is formed such that the vertices are the views and two vertices are connected by an edge if the two views have each other as neighbors.
-// For each vertex, a list of possible labels is created using the list of neighbor views and scored accordingly (the score is normalized by the average score).
-// For each existing edge, the score is defined such that pairing the same two views for any two vertices is discouraged (a constant high penalty is applied for such edges).
-// This primal-dual defined problem, even if NP hard, can be solved by a Belief Propagation like algorithm, obtaining in general a solution close enough to optimality.
 // 全局选择每个图像的最佳目标视图，     todo
-// 同时尝试所选图像对覆盖整个场景；
+// 同时尝试所选图像对 覆盖整个场景；
 // 在NeighborsMap中返回每个图像的选定邻居的映射。
-// 对于每个视图，给出了按共享稀疏点和重叠图像区域的数量排序的相邻视图的列表。
-// 接下来，形成图，使得顶点是视图，并且如果两个视图彼此相邻，则两个顶点通过边连接。
+// 对于每个视图，给出了按 共享稀疏点 和 重叠图像区域 的数量排序的相邻视图的列表。
+// 接下来，形成图，      使得顶点是视图，并且如果两个视图彼此相邻，则两个顶点通过边连接。  （图）
 // 对于每个顶点，使用邻居视图列表创建一个可能的标签列表，并相应地打分（分数由平均分数规范化）。
 // 对于每个现有边，分数被定义为不鼓励为任何两个顶点配对相同的两个视图（对这样的边应用恒定的高惩罚）。
-// 这个原始对偶定义的问题，即使NP困难，也可以用类似信念传播的算法来解决，通常可以得到一个足够接近最优性的解。
+// 这个原始对偶定义的问题，NP困难，也可以用类似信念传播的算法来解决，通常可以得到一个足够接近最优性的解。
 bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexArr& neighborsMap)
 {
-	// find all pair of images valid for dense reconstruction 查找所有可用于密集重构的图像对
+	// 查找所有可用于密集重构的图像对
 	typedef std::unordered_map<uint64_t,float> PairAreaMap;		// 存储公共区域面积
 	PairAreaMap edges;
 	double totScore(0);
@@ -201,7 +193,7 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 		ASSERT(imagesMap[idx] != NO_ID);
 		const ViewScoreArr& neighbors(arrDepthData[idx].neighbors);
 		ASSERT(neighbors.GetSize() <= OPTDENSE::nMaxViews);
-		// register edges
+		// 标注边
 		FOREACHPTR(pNeighbor, neighbors) {
 			const IIndex idx2(pNeighbor->idx.ID);
 			ASSERT(imagesMap[idx2] != NO_ID);
@@ -214,28 +206,28 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 		return false;
 	const float avgScore((float)(totScore/(double)numScores));
 
-	// run global optimization 执行全局优化  TODO
+	// 执行全局优化  TODO
 	const float fPairwiseMul = OPTDENSE::fPairwiseMul; // default 0.3
 	const float fEmptyUnaryMult = 6.f;
 	const float fEmptyPairwise = 8.f*OPTDENSE::fPairwiseMul;    // 空对
 	const float fSamePairwise = 24.f*OPTDENSE::fPairwiseMul;    // 相同对
-	const IIndex _num_labels = OPTDENSE::nMaxViews+1; // N neighbors and an empty state
+	const IIndex _num_labels = OPTDENSE::nMaxViews+1; // N个邻居和一个空的状态
 	const IIndex _num_nodes = images.GetSize(); // 输入图像的数量
 	typedef MRFEnergy<TypeGeneral> MRFEnergyType;
 	CAutoPtr<MRFEnergyType> energy(new MRFEnergyType(TypeGeneral::GlobalSize()));
 	CAutoPtrArr<MRFEnergyType::NodeId> nodes(new MRFEnergyType::NodeId[_num_nodes]);
 	typedef SEACAVE::cList<TypeGeneral::REAL, const TypeGeneral::REAL&, 0> EnergyCostArr;
-	// unary costs: inverse proportional to the image pair score 一元代价:与图像对得分成反比
+	// 一元代价:与图像对得分成反比
 	EnergyCostArr arrUnary(_num_labels);
 	for (IIndex n=0; n<_num_nodes; ++n) {
 		const ViewScoreArr& neighbors(arrDepthData[images[n]].neighbors);
 		FOREACH(k, neighbors) // 使用平均得分对值进行标准化（不要太依赖于场景中的特征数量）
-			arrUnary[k] = avgScore/neighbors[k].score; // use average score to normalize the values (not to depend so much on the number of features in the scene)
+			arrUnary[k] = avgScore/neighbors[k].score;
 		arrUnary[neighbors.GetSize()] = fEmptyUnaryMult*(neighbors.IsEmpty()?avgScore*0.01f:arrUnary[neighbors.GetSize()-1]);
 		nodes[n] = energy->AddNode(TypeGeneral::LocalSize(neighbors.GetSize()+1), TypeGeneral::NodeData(arrUnary.Begin()));
 	}
-	// pairwise costs: as ratios between the area to be covered and the area actually covered
-	// 成对费用:按拟覆盖面积与实际覆盖面积之间的比率计算
+
+	// 成对消耗:按拟覆盖面积与实际覆盖面积之间的比率计算
 	EnergyCostArr arrPairwise(_num_labels*_num_labels);
 	for (PairAreaMap::const_reference edge: edges) {
 		const PairIdx pair(edge.first);
@@ -263,7 +255,7 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 		energy->AddEdge(nodes[nodeI], nodes[nodeJ], TypeGeneral::EdgeData(TypeGeneral::GENERAL, arrPairwise.Begin()));
 	}
 
-	// minimize energy
+	// 最小化能量消耗
 	MRFEnergyType::Options options;
 	options.m_eps = OPTDENSE::fOptimizerEps;
 	options.m_iterMax = OPTDENSE::nOptimizerMaxIters;
@@ -279,7 +271,7 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 	energy->Minimize_BP(options, energyVal);
 	#endif
 
-	// extract optimized depth map
+	// 提取优化的深度图
 	neighborsMap.Resize(_num_nodes);
 	for (IIndex n=0; n<_num_nodes; ++n) {
 		const ViewScoreArr& neighbors(arrDepthData[images[n]].neighbors);
@@ -287,17 +279,17 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 		const IIndex label((IIndex)energy->GetSolution(nodes[n]));
 		ASSERT(label <= neighbors.GetSize());
 		if (label == neighbors.GetSize()) {
-			idxNeighbor = NO_ID; // empty
+			idxNeighbor = NO_ID; // 置空
 		} else {
 			idxNeighbor = label;
 			DEBUG_ULTIMATE("\treference image %3u paired with target image %3u (idx %2u)", images[n], neighbors[label].idx.ID, label);
 		}
 	}
 
-	// remove all images with no valid neighbors
+	// 删除所有没有有效邻居的图像
 	RFOREACH(i, neighborsMap) {
 		if (neighborsMap[i] == NO_ID) {
-			// remove image with no neighbors
+			// 删除没有邻居的图像
 			for (IIndex& imageMap: imagesMap)
 				if (imageMap != NO_ID && imageMap > i)
 					--imageMap;
@@ -310,22 +302,20 @@ bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexA
 } // SelectViews
 /*----------------------------------------------------------------*/
 
-// compute visibility for the reference image (the first image in "images")
-// and select the best views for reconstructing the depth-map;
-// extract also all 3D points seen by the reference image
+
 //计算参考图像（“图像”中的第一幅图像）的可见性，并选择重建深度图的最佳视图；
 //还提取参考图像所看到的所有3D点  利用Scene.cpp中的查找相邻视图
 bool DepthMapsData::SelectViews(DepthData& depthData)
 {
-	// find and sort valid neighbor views
-	const IIndex idxImage((IIndex)(&depthData-arrDepthData.Begin()));
+	// 查找并排序有效的邻居视图
+	const IIndex idxImage((IIndex)(&depthData-arrDepthData.Begin()));	// 相对于参考视图的索引
 	ASSERT(depthData.neighbors.IsEmpty());
 	ASSERT(scene.images[idxImage].neighbors.IsEmpty());
-	if (!scene.SelectNeighborViews(idxImage, depthData.points, OPTDENSE::nMinViews, OPTDENSE::nMinViewsTrustPoint>1?OPTDENSE::nMinViewsTrustPoint:2, FD2R(OPTDENSE::fOptimAngle)))
+	if (!scene.SelectNeighborViews(idxImage, depthData.points, OPTDENSE::nMinViews, OPTDENSE::nMinViewsTrustPoint>1?OPTDENSE::nMinViewsTrustPoint:2, FD2R(OPTDENSE::fOptimAngle)))	// 10
 		return false;
 	depthData.neighbors.CopyOf(scene.images[idxImage].neighbors);
 
-	// remove invalid neighbor views
+	// 移除无效的邻居视图
 	const float fMinArea(OPTDENSE::fMinArea);
 	const float fMinScale(0.2f), fMaxScale(3.2f);
 	const float fMinAngle(FD2R(OPTDENSE::fMinAngle));
@@ -1556,14 +1546,14 @@ void DepthMapsData::FuseDepthMaps(PointCloud& pointcloud, bool bEstimateNormal)
 
 
 // S T R U C T S ///////////////////////////////////////////////////
-
+// 稠密深度映射数据
 struct DenseDepthMapData {
 	Scene& scene;
 	IIndexArr images;
 	IIndexArr neighborsMap;
-	DepthMapsData detphMaps;
+	DepthMapsData detphMaps;	// 深度映射数据
 	volatile Thread::safe_t idxImage;	// 易变性
-	SEACAVE::EventQueue events; // internal events queue (processed by the working threads) 内设事件队列（按工作流程处理）
+	SEACAVE::EventQueue events; // 内设事件队列（按工作流程处理）
 	Semaphore sem; // 信号灯 多线程
 	CAutoPtr<Util::Progress> progress;
 
@@ -1588,12 +1578,10 @@ bool Scene::DenseReconstruction()
 	DenseDepthMapData data(*this);
 
 	{
-	// maps global view indices to our list of views to be processed
 	// 将全局视图索引映射到要处理的视图列表
-	IIndexArr imagesMap;
+	IIndexArr imagesMap;	// cList<IIndex, IIndex, 0, 16, IIndex>
 
-	// prepare images for dense reconstruction (load if needed)
-	// 为密集重建准备图像（如果需要加载）
+	// 为稠密重建准备图像（如果需要加载）
 	{
 		TD_TIMER_START();
 		data.images.Reserve(images.GetSize());  // 申请空间
@@ -1602,7 +1590,7 @@ bool Scene::DenseReconstruction()
 		bool bAbort(false);
 		#pragma omp parallel for shared(data, bAbort)   // 对for循环进行并行
 
-		// 从Scene中导入图像
+		// 从Scene类中导入图像
 		for (int_t ID=0; ID<(int_t)images.GetSize(); ++ID) {
 			#pragma omp flush (bAbort)
 			if (bAbort)
@@ -1611,7 +1599,7 @@ bool Scene::DenseReconstruction()
 		#else
 		FOREACH(idxImage, images) {
 		#endif
-			// skip invalid, uncalibrated or discarded images
+			// 跳过无效、未校准或丢弃的图像
 			Image& imageData = images[idxImage];
 			if (!imageData.IsValid()) {
 				#ifdef DENSE_USE_OPENMP
@@ -1621,7 +1609,7 @@ bool Scene::DenseReconstruction()
 				continue;
 			}
 
-			// map image index 映射图像索引，即保存到数组当中
+			// 映射图像索引，即保存到数组当中
 			#ifdef DENSE_USE_OPENMP
 			#pragma omp critical    // 遇到if定义的情况时，限定以下的部分一次只用一个线程
 			#endif
@@ -1629,7 +1617,7 @@ bool Scene::DenseReconstruction()
 				imagesMap[idxImage] = data.images.GetSize();
 				data.images.Insert(idxImage);
 			}
-			// reload image at the appropriate resolution 以适当的分辨率重新加载图像  重新计算最大分辨率
+			// 以适当的分辨率重新加载图像  重新计算最大分辨率
 			const unsigned nMaxResolution(imageData.RecomputeMaxResolution(OPTDENSE::nResolutionLevel, OPTDENSE::nMinResolution));
 			if (!imageData.ReloadImage(nMaxResolution)) {   // 根据新的分辨率设置图片大小
 				#ifdef DENSE_USE_OPENMP
@@ -1641,7 +1629,7 @@ bool Scene::DenseReconstruction()
 				#endif
 			}
 			imageData.UpdateCamera(platforms);  // 因为图片的大小改变，重新计算相机的有关参数（内参矩阵）
-			// print image camera
+			// 打印图像相机相关的参数
 			DEBUG_ULTIMATE("(libs/MVS/SceneDensify.cpp)K%d = \n%s", idxImage, cvMat2String(imageData.camera.K).c_str());
 			DEBUG_LEVEL(3, "(libs/MVS/SceneDensify.cpp)R%d = \n%s", idxImage, cvMat2String(imageData.camera.R).c_str());
 			DEBUG_LEVEL(3, "(libs/MVS/SceneDensify.cpp)C%d = \n%s", idxImage, cvMat2String(imageData.camera.C).c_str());
@@ -1657,10 +1645,10 @@ bool Scene::DenseReconstruction()
 		VERBOSE("(libs/MVS/SceneDensify.cpp)Preparing images for dense reconstruction completed: %d images (%s)", images.GetSize(), TD_TIMER_GET_FMT().c_str());
 	    }
 
-	// select images to be used for dense reconstruction
+	// 选择要用于密度重建的图像
 	{
 		TD_TIMER_START();
-		// for each image, find all useful neighbor views
+		// 对于每个图像，查找所有有用的邻居视图
 		IIndexArr invalidIDs;
 		#ifdef DENSE_USE_OPENMP
 		#pragma omp parallel for shared(data, invalidIDs)
@@ -1674,7 +1662,7 @@ bool Scene::DenseReconstruction()
 
 			DepthData& depthData(data.detphMaps.arrDepthData[idxImage]);
 			// 从最开始的深度图中选择有效的深度图
-			if (!data.detphMaps.SelectViews(depthData)) {
+			if (!data.detphMaps.SelectViews(depthData)) {	// 利用评分选取有效的深度图
 				#ifdef DENSE_USE_OPENMP
 				#pragma omp critical
 				#endif
@@ -1688,7 +1676,7 @@ bool Scene::DenseReconstruction()
 			imagesMap[data.images[idx]] = NO_ID;
 			data.images.RemoveAt(idx);
 		}
-		// globally select a target view for each reference image
+
 		// 全局选择每个参考图像的目标视图
 		if (OPTDENSE::nNumViews == 1 && !data.detphMaps.SelectViews(data.images, imagesMap, data.neighborsMap)) {
 			VERBOSE("(libs/MVS/SceneDensify.cpp)error: no valid images to be dense reconstructed");

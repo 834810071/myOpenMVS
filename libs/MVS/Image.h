@@ -50,9 +50,9 @@ typedef cList<IIndex, IIndex, 0, 16, IIndex> IIndexArr;
 
 struct MVS_API ViewInfo {
 	IIndex ID; // image ID
-	uint32_t points; // number of 3D points shared with the reference image
-	float scale; // image scale relative to the reference image
-	float angle; // image angle relative to the reference image (radians)
+	uint32_t points; // number of 3D points shared with the reference image 与参考图像共享的3D点的数目
+	float scale; // image scale relative to the reference image 相对于参考图像的图像缩放
+	float angle; // image angle relative to the reference image (radians) 相对于参考图像的图像角度（弧度）
 	float area; // common image area relative to the reference image (ratio) 相对于参考图像的公共图像区域（比率）
 
 	#ifdef _USE_BOOST
@@ -71,20 +71,20 @@ typedef MVS_API TIndexScore<ViewInfo, float> ViewScore;
 typedef MVS_API CLISTDEF0IDX(ViewScore, IIndex) ViewScoreArr;
 /*----------------------------------------------------------------*/
 
-// a view instance seeing the scene
+// a view instance seeing the scene 查看场景的视图实例
 class MVS_API Image
 {
 public:
 	uint32_t platformID; // ID of the associated platform
-	uint32_t cameraID; // ID of the associated camera on the associated platform
+	uint32_t cameraID; // ID of the associated camera on the associated platform 关联平台上的关联摄像机的ID
 	uint32_t poseID; // ID of the pose of the associated platform
 	String name; // image file name (relative path)	相对路径
 	Camera camera; // view's pose
 	uint32_t width, height; // image size
-	Image8U3 image; // image color pixels
-	ViewScoreArr neighbors; // score&store the neighbor images
-	float scale; // image scale relative to the original size
-	float avgDepth; // average depth of the points seen by this camera
+	Image8U3 image; // image color pixels 图像颜色像素
+	ViewScoreArr neighbors; // score&store the neighbor images 记分和存储邻居图像
+	float scale; // image scale relative to the original size 相对于原始大小的图像缩放
+	float avgDepth; // average depth of the points seen by this camera 此相机所见点的平均深度
 
 public:
 	inline Image() {

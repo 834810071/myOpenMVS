@@ -113,10 +113,10 @@ extern float fRandomSmoothBonus;
 
 struct MVS_API DepthData {
 	struct ViewData {
-		float scale; // image scale relative to the reference image 相对于参考图像的图像缩放
-		Camera camera; // camera matrix corresponding to this image
-		Image32F image; // image float intensities 图像浮动强度
-		Image* pImageData; // image data
+		float scale; // 相对于参考图像的图像缩放
+		Camera camera; // 对应于该图像的摄像机矩阵
+		Image32F image; // 图像浮动强度
+		Image* pImageData; // 图像数据
 
 		template <typename IMAGE>
 		static bool ScaleImage(const IMAGE& image, IMAGE& imageScaled, float scale) {
@@ -129,20 +129,24 @@ struct MVS_API DepthData {
 	typedef SEACAVE::cList<ViewData,const ViewData&,2> ViewDataArr;
 
 	// 用于计算此深度图的图像数组（参考图像是第一个）
-	ViewDataArr images; // array of images used to compute this depth-map (reference image is the first)
+	ViewDataArr images;
 	// 看到此深度图的所有图像的数组（按重要性递减排序）
-	ViewScoreArr neighbors; // array of all images seeing this depth-map (ordered by decreasing importance)
+	ViewScoreArr neighbors;
 	// 此图像看到的稀疏3D点的索引
-	IndexArr points; // indices of the sparse 3D points seen by the this image
-	BitMatrix mask; // mark pixels to be ignored
-	DepthMap depthMap; // depth-map
+	IndexArr points;
+	// 标记要忽略的像素
+	BitMatrix mask;
+	// depth-map
+	DepthMap depthMap;
 	// 相机空间中的法线映射
-	NormalMap normalMap; // normal-map in camera space
-	ConfidenceMap confMap; // confidence-map
+	NormalMap normalMap;
+	// confidence-map
+	ConfidenceMap confMap;
 	float dMin, dMax; // global depth range for this image
 	// 此深度图被引用多少次（在0上可以安全卸载）
-	unsigned references; // how many times this depth-map is referenced (on 0 can be safely unloaded)
-	CriticalSection cs; // used to count references 用于计算引用
+	unsigned references;
+	// 用于计算引用
+	CriticalSection cs;
 
 	inline DepthData() : references(0) {}
 

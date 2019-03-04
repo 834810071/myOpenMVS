@@ -351,6 +351,9 @@ bool Load(ArchiveLoad& a, std::vector<_Tp>& v) {
 // interface used to export/import MVS input data;
 //  - MAX(width,height) is used for normalization
 //  - row-major order is used for storing the matrices
+// 用于导出/导入MVS输入数据的接口；
+// -max（宽度、高度）用于规范化
+// -行-主要顺序用于存储矩阵
 struct Interface
 {
 	typedef cv::Point3_<float> Pos3f;
@@ -366,7 +369,7 @@ struct Interface
 		// structure describing a camera mounted on a platform
 		struct Camera {
 			std::string name; // camera's name
-			uint32_t width, height; // image resolution in pixels for all images sharing this camera (optional)
+			uint32_t width, height; // image resolution in pixels for all images sharing this camera (optional) 共享此相机得所有图像得图像分辨率（以像素为单位）（可选）
 			Mat33d K; // camera's intrinsics matrix (normalized if image resolution not specified)
 			Mat33d R; // camera's rotation matrix relative to the platform
 			// 摄像机相对于平台的平移矢量
@@ -438,7 +441,7 @@ struct Interface
 		uint32_t platformID; // ID of the associated platform
 		uint32_t cameraID; // ID of the associated camera on the associated platform
 		uint32_t poseID; // ID of the pose of the associated platform
-		uint32_t ID; // ID of this image in the global space (optional)
+		uint32_t ID; // ID of this image in the global space (optional) 全局空间中此映像的ID（可选）
 
 		Image() : poseID(NO_ID), ID(NO_ID) {}
 

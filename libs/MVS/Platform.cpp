@@ -40,12 +40,12 @@ using namespace MVS;
 
 // S T R U C T S ///////////////////////////////////////////////////
 
-// return the normalized absolute camera pose
+// 返回归一化绝对相机姿态
 Platform::Camera Platform::GetCamera(uint32_t cameraID, uint32_t poseID) const
 {
 	const Camera& camera = cameras[cameraID];
 	const Pose& pose = poses[poseID];
-	// add the relative camera pose to the platform
+	// 将相机的相对姿态添加到平台
 	Camera cam;
 	cam.K = camera.K;
 	cam.R = camera.R*pose.R;

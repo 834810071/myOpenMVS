@@ -70,7 +70,7 @@ public:
 public:
 	String name; // platform's name
 	CameraArr cameras; // cameras mounted on the platform
-	PoseArr poses; // trajectory of the platform
+	PoseArr poses; // trajectory of the platform 平台轨迹
 
 public:
 	inline Platform() {}
