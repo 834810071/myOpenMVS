@@ -118,6 +118,7 @@ struct MVS_API DepthData {
 		Image32F image; // 图像浮动强度
 		Image* pImageData; // 图像数据
 
+		// 缩放图像
 		template <typename IMAGE>
 		static bool ScaleImage(const IMAGE& image, IMAGE& imageScaled, float scale) {
 			if (ABS(scale-1.f) < 0.15f)
