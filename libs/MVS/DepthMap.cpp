@@ -69,7 +69,7 @@ DEFVAR_OPTDENSE_uint32(nMinViewsFuse, "Min Views Fuse", "minimum number of image
 DEFVAR_OPTDENSE_uint32(nMinViewsFilter, "Min Views Filter", "minimum number of images that agrees with an estimate in order to consider it inlier", "2")
 MDEFVAR_OPTDENSE_uint32(nMinViewsFilterAdjust, "Min Views Filter Adjust", "minimum number of images that agrees with an estimate in order to consider it inlier (0 - disabled)", "1")
 MDEFVAR_OPTDENSE_uint32(nMinViewsTrustPoint, "Min Views Trust Point", "min-number of views so that the point is considered for approximating the depth-maps (<2 - random initialization)", "2")
-MDEFVAR_OPTDENSE_uint32(nNumViews, "Num Views", "Number of views used for depth-map estimation (0 - all views available)", "1", "0")
+MDEFVAR_OPTDENSE_uint32(nMinViewsTrustPoint, "Num Views", "Number of views used for depth-map estimation (0 - all views available)", "1", "0")
 MDEFVAR_OPTDENSE_bool(bFilterAdjust, "Filter Adjust", "adjust depth estimates during filtering", "1")
 MDEFVAR_OPTDENSE_bool(bAddCorners, "Add Corners", "add support points at image corners with nearest neighbor disparities", "1")
 MDEFVAR_OPTDENSE_float(fViewMinScore, "View Min Score", "Min score to consider a neighbor images (0 - disabled)", "2.0")
@@ -375,22 +375,21 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 	#endif
 }
 
-// run propagation and random refinement cycles;
-// the solution belonging to the target image can be also propagated
+
 // 运行传播和随机细化循环；
 // 还可以传播属于目标映像的解决方案
 void DepthEstimator::ProcessPixel(IDX idx)
 {
-	// compute pixel coordinates from pixel index and its neighbors 从像素索引及其邻居计算像素坐标
+	// 从像素索引及其邻居计算像素坐标
 	ASSERT(dir == LT2RB || dir == RB2LT);	// L left T top R right B bottom
 	if (!PreparePixelPatch(dir == LT2RB ? coords[idx] : coords[coords.GetSize()-1-idx]))
 		return;
 
 	float& conf = confMap0(x0);	// x0 一个像素循环期间的常数 	confidence map
-	unsigned invScaleRange(DecodeScoreScale(conf));	// 解码NCC分数
+	unsigned invScaleRange(DecodeScoreScale(conf));	// 解码NCC分数  得到NCC分数
 	// fNCCThresholdRefine 1-不再细化匹配的NCC分数                        填充像素贴片
 	if ((invScaleRange <= 2 || conf > OPTDENSE::fNCCThresholdRefine) && FillPixelPatch()) {
-		// find neighbors 查找邻居
+		// 查找邻居
 		neighbors.Empty();
 		neighborsData.Empty();
 		if (dir == LT2RB) {
@@ -459,7 +458,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		Normal& normal = normalMap0(x0);
 		const Normal viewDir(Cast<float>(static_cast<const Point3&>(X0)));
 		ASSERT(depth > 0 && normal.dot(viewDir) < 0);
-		// check if any of the neighbor estimates are better then the current estimate 检查是否有任何邻居估计值比当前估计值更好
+		// 检查是否有任何邻居估计值比当前估计值更好
 		FOREACH(n, neighbors) {
 			float nconf(confMap0(neighbors[n]));
 			const unsigned ninvScaleRange(DecodeScoreScale(nconf));
@@ -478,7 +477,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				invScaleRange = (ninvScaleRange>1 ? ninvScaleRange-1 : ninvScaleRange);
 			}
 		}
-		// check few random solutions close to the current estimate in an attempt to find a better estimate
+
 		// 检查几个接近当前估计值的随机解决方案，试图找到更好的估计值
 		float depthRange(MaxDepthDifference(depth, OPTDENSE::fRandomDepthRatio));
 		if (invScaleRange > OPTDENSE::nRandomMaxScale)
