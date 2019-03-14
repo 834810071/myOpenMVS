@@ -189,7 +189,7 @@ int main(int argc, LPCTSTR* argv)
 
 	Scene scene(OPT::nMaxThreads);
 
-	/*// (0 - 禁用， <0 - 点数， >0 - 每平方单位的样本密度） TODO  没用  0
+	/*// (0 - 禁用， <0 - 点数， >0 - 每平方单位的样本密度） TODO
 	if (OPT::fSampleMesh != 0) {	// 均匀采样网格上的点
 	    cout << 1 << endl;
 		// sample input mesh and export the obtained point-cloud	采样输入网格并导出获得的点云

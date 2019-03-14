@@ -153,6 +153,7 @@ DepthMapsData::~DepthMapsData()
 // 对于每个顶点，使用邻居视图列表创建一个可能的标签列表，并相应地打分（分数由平均分数规范化）。
 // 对于每个现有边，分数被定义为不鼓励为任何两个顶点配对相同的两个视图（对这样的边应用恒定的高惩罚）。
 // 这个原始对偶定义的问题，NP困难，也可以用类似信念传播的算法来解决，通常可以得到一个足够接近最优性的解。
+// MVS 3.13  概率图之马尔可夫随机场（Markov Random Field，MRF）
 bool DepthMapsData::SelectViews(IIndexArr& images, IIndexArr& imagesMap, IIndexArr& neighborsMap)
 {
 	// 查找所有可用于密集重构的图像对
@@ -282,7 +283,7 @@ bool DepthMapsData::SelectViews(DepthData& depthData)
 {
 	// 查找并排序有效的邻居视图
 	const IIndex idxImage((IIndex)(&depthData-arrDepthData.Begin()));	// 相对于参考视图的索引
-	ASSERT(depthData.neighbors.IsEmpty());
+	ASSERT(depthData.neighbors.IsEmpty());  // 确保DesneDepthMapData 和 Scene两个类中目前都没有邻居项
 	ASSERT(scene.images[idxImage].neighbors.IsEmpty());
 	if (!scene.SelectNeighborViews(idxImage, depthData.points, OPTDENSE::nMinViews, OPTDENSE::nMinViewsTrustPoint>1?OPTDENSE::nMinViewsTrustPoint:2, FD2R(OPTDENSE::fOptimAngle)))	// 10
 		return false;
@@ -389,6 +390,7 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 	ASSERT(sizeof(Point3) == sizeof(X3D));
 	ASSERT(sizeof(Point3) == sizeof(CGAL::Point));
 	std::pair<float,float> depthBounds(FLT_MAX, 0.f); // 深度范围 [最大范围， 最小范围]
+
 	// 遍历3d点
 	FOREACH(p, points) {    // points里存放的是索引
 		const PointCloud::Point& point = scene.pointcloud.points[points[p]];    // 取出scene类中点云中的点
@@ -401,13 +403,14 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 		if (depthBounds.second < depth)
 			depthBounds.second = depth;
 	}
+
 	// 如果请求全尺寸深度图
 	if (OPTDENSE::bAddCorners) {
 		typedef TIndexScore<float,float> DepthDist;	// 深度距离（作为评分）
 		typedef CLISTDEF0(DepthDist) DepthDistArr;
 		typedef Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::InnerStride<2> > FloatMap;
-		// 将平均深度处的四个图像角相加
-		const CGAL::VertexHandle vcorners[] = {	// 存储4个角的点坐标
+		// 将平均深度处的四个图像角相加	输入数据
+		const CGAL::VertexHandle vcorners[] = {	// 存储4个角的点坐标  空间
 			delaunay.insert(CGAL::Point(0, 0, image.pImageData->avgDepth)),	// 左上角
 			delaunay.insert(CGAL::Point(image.image.width(), 0, image.pImageData->avgDepth)),	// 右上角
 			delaunay.insert(CGAL::Point(0, image.image.height(), image.pImageData->avgDepth)),	// 左下角
@@ -421,11 +424,13 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 			CGAL::FaceCirculator cfc(delaunay.incident_faces(vcorner)); // 入射面
 			if (cfc == 0)
 				continue; // 正常情况下不应该发生
+
 			const CGAL::FaceCirculator done(cfc);
 			Point3d& poszA = (Point3d&)vcorner->point();
 			const Point2d& posA = reinterpret_cast<const Point2d&>(poszA);
-			const Ray3d rayA(Point3d::ZERO, normalized(image.camera.TransformPointI2C(poszA)));
+			const Ray3d rayA(Point3d::ZERO, normalized(image.camera.TransformPointI2C(poszA)));	// 射线
 			DepthDistArr depths(0, numPoints);
+
 			do {
 				CGAL::FaceHandle fc(cfc->neighbor(cfc->index(vcorner)));
 				if (fc == delaunay.infinite_face())	// 与无限顶点关联的面
@@ -453,6 +458,8 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 				}
 				Continue:;
 			} while (++cfc != done);
+
+
 			if (depths.GetSize() != numPoints)
 				continue; // 正常情况下不会发生
 			FloatMap vecDists(&depths[0].score, numPoints);
@@ -488,12 +495,15 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 		depthData.depthMap.setTo(Depth(0));
 		depthData.normalMap.setTo(0.f);
 	}
+
 	struct RasterDepthDataPlaneData { // 光栅深度数据
 		const Camera& P;
 		DepthMap& depthMap;
 		NormalMap& normalMap;
 		Point3f normal;
 		Point3f normalPlane;
+
+
 		inline void operator()(const ImageRef& pt) {
 			if (!depthMap.isInside(pt))
 				return;
@@ -620,9 +630,10 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 // 如:“使用基于贴片的立体用于大规模场景的精确多视图3D重建”，S.Shen，2013 todo
 // 尽管有一些更改/添加，但实现仍然紧跟在本文之后。
 // 给定同一场景的两个视图，我们将重建深度图的视图称为“参考图像”，将另一个视图称为“目标图像”。
+
 // 第一步，通过在可用稀疏点之间插值来近似整个深度图。
 // 接下来，深度图将从上/左到下/右角传递，并在接下来的每个步骤中使用相反的SENS。
-// 对于每个像素，如果 NCC分数 更好，则首先用其邻居估计替换当前深度估计。
+// 对于每个像素，如果邻居的NCC分数 更好，则首先用其邻居估计替换当前深度估计。
 // 其次，通过在当前深度和正常值周围尝试随机估计来精化估计值，以保持得分最佳的估计值。
 // 估计可以在任何点停止，通常2-3次迭代就足够收敛了。
 // 对于每个像素，通过计算参考图像中的贴片和目标图像中的包装贴片之间的NCC得分来对深度和法线进行记分，例如由待估计的当前值定义的单应性矩阵所指示的。
@@ -636,8 +647,10 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	// 初始化深度和法线图
 	DepthData& depthData(arrDepthData[idxImage]);
 	ASSERT(depthData.images.GetSize() > 1 && !depthData.points.IsEmpty());
+
 	const DepthData::ViewData& image(depthData.images.First()); // 当前视图
 	ASSERT(!image.image.empty() && !depthData.images[1].image.empty()); // （image.image 图像浮动强度 float类型）
+
 	const Image8U::Size size(image.image.size());  // 图像尺寸
 	depthData.depthMap.create(size); depthData.depthMap.memset(0);  // 深度图
 	depthData.normalMap.create(size);   // 法线图
@@ -673,7 +686,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		depthData.dMax *= 1.1f;
 	} else {
 		// 使用稀疏点云计算粗略估计
-		InitDepthMap(depthData);
+		InitDepthMap(depthData);	// cgal三角剖分进行估计
 		#if TD_VERBOSE != TD_VERBOSE_OFF
 		// 将粗略深度图保存为图像 没有使用过
 		if (g_nVerbosityLevel > 4) {  // 冗长程度
@@ -1527,17 +1540,17 @@ bool Scene::DenseReconstruction()
 	{
 		TD_TIMER_START();
 		data.images.Reserve(images.GetSize());  // 申请空间
-		imagesMap.Resize(images.GetSize());
+		imagesMap.Resize(images.GetSize());     // 图片对
 		#ifdef DENSE_USE_OPENMP
 		bool bAbort(false);
 		#pragma omp parallel for shared(data, bAbort)   // 对for循环进行并行
 
-		// 从Scene类中导入图像
+		// 从Scene类中导入图像 遍历图像
 		for (int_t ID=0; ID<(int_t)images.GetSize(); ++ID) {
 			#pragma omp flush (bAbort)
 			if (bAbort)
 				continue;
-			const IIndex idxImage((IIndex)ID);
+			const IIndex idxImage((IIndex)ID);  // 图像索引
 		#else
 		FOREACH(idxImage, images) {
 		#endif
@@ -1556,8 +1569,8 @@ bool Scene::DenseReconstruction()
 			#pragma omp critical    // 遇到if定义的情况时，限定以下的部分一次只用一个线程
 			#endif
 			{
-				imagesMap[idxImage] = data.images.GetSize();
-				data.images.Insert(idxImage);
+				imagesMap[idxImage] = data.images.GetSize();    // 为该图像所关联的图像申请空间
+				data.images.Insert(idxImage);   // 保存该图像
 			}
 			// 以适当的分辨率重新加载图像  重新计算最大分辨率
 			const unsigned nMaxResolution(imageData.RecomputeMaxResolution(OPTDENSE::nResolutionLevel, OPTDENSE::nMinResolution));
@@ -1594,6 +1607,7 @@ bool Scene::DenseReconstruction()
 		IIndexArr invalidIDs;
 		#ifdef DENSE_USE_OPENMP
 		#pragma omp parallel for shared(data, invalidIDs)
+		// 遍历图像
 		for (int_t ID=0; ID<(int_t)data.images.GetSize(); ++ID) {
 			const IIndex idx((IIndex)ID);
 		#else
@@ -1603,7 +1617,7 @@ bool Scene::DenseReconstruction()
 			ASSERT(imagesMap[idxImage] != NO_ID);
 
 			DepthData& depthData(data.detphMaps.arrDepthData[idxImage]);
-			// 从最开始的深度图中选择有效的深度图
+			// 从最开始的深度图中选择有效的深度图  查找邻居 匹配对
 			if (!data.detphMaps.SelectViews(depthData)) {	// 利用评分选取有效的深度图
 				#ifdef DENSE_USE_OPENMP
 				#pragma omp critical
@@ -1619,7 +1633,7 @@ bool Scene::DenseReconstruction()
 			data.images.RemoveAt(idx);
 		}
 
-		// 全局选择每个参考图像的目标视图  why
+		// 全局选择每个参考图像的目标视图  MRF进行优化
 		if (OPTDENSE::nNumViews == 1 && !data.detphMaps.SelectViews(data.images, imagesMap, data.neighborsMap)) {
 			VERBOSE("(libs/MVS/SceneDensify.cpp)error: no valid images to be dense reconstructed");
 			return false;

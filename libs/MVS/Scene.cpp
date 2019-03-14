@@ -439,7 +439,7 @@ inline float Footprint(const Camera& camera, const Point3f& X) {
 	return (float)norm(camera.TransformPointC2I(Point3(cX.x+fSphereRadius,cX.y,cX.z))-camera.TransformPointC2I(cX))+std::numeric_limits<float>::epsilon();
 }
 
-// 计算参考图像的可见性，并选择重建密集点云的最佳视图；
+// 计算参考图像的可见性，并选择重建密集点云的最佳视图；		Accurate, Dense, and Robust Multi-View Stereopsis 论文中对应的特征匹配
 // 还提取参考图像所看到的所有3D点；
 // ("Multi-View Stereo for Community Photo Collections", Goesele, 2007)  TODO                                       10度
 bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinViews, unsigned nMinPointViews, float fOptimAngle)
@@ -459,35 +459,37 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 	};
 	CLISTDEF0(Score) scores(images.GetSize());
 	scores.Memset(0);
-	if (nMinPointViews > nCalibratedImages)
+	if (nMinPointViews > nCalibratedImages)	// 确保要求的最小视图数量小于有效视图数量
 		nMinPointViews = nCalibratedImages;
 	unsigned nPoints = 0;
 	imageData.avgDepth = 0;
-	// 提取参考图像所看到的点
+	// 提取参考图像所看到的点  并评分
 	FOREACH(idx, pointcloud.points) {
-		const PointCloud::ViewArr& views = pointcloud.pointViews[idx];  // 该点对应的视图数组
+		const PointCloud::ViewArr& views = pointcloud.pointViews[idx];  // 该点对应的视图数组即看到该点的图片
 		ASSERT(views.IsSorted());   // 保证视图数组排序
 		if (views.FindFirst(ID) == PointCloud::ViewArr::NO_INDEX)   // 如果该视图不存在，则继续 保证参考视图存在
 			continue;
 		// 存储此点
 		const PointCloud::Point& point = pointcloud.points[idx];
-		if (views.GetSize() >= nMinPointViews)
+		if (views.GetSize() >= nMinPointViews)	// 看到该点的图片满足要求
 			points.Insert((uint32_t)idx);
 		imageData.avgDepth += (float)imageData.camera.PointDepth(point);    // P(2,0)*X.x + P(2,1)*X.y + P(2,2)*X.z + P(2,3) P(投影矩阵) TODO
 		++nPoints;
 		// 对共享视图评分            C 平移（3，1），外部摄像机参数
 		const Point3f V1(imageData.camera.C - Cast<REAL>(point));
 		const float footprint1(Footprint(imageData.camera, point)); // 足迹
+		// 遍历看到该点的图片
 		FOREACHPTR(pView, views) {
 			const PointCloud::View& view = *pView;
 			if (view == ID) // 如果该视图是当前视图，则继续
 				continue;
 			const Image& imageData2 = images[view]; // view 是 int类型
-			const Point3f V2(imageData2.camera.C - Cast<REAL>(point));
+			const Point3f V2(imageData2.camera.C - Cast<REAL>(point));	// 平移关系
 			const float footprint2(Footprint(imageData2.camera, point));
 			const float fAngle(ACOS(ComputeAngle<float,float>(V1.ptr(), V2.ptr())));	// 角度
 			const float fScaleRatio(footprint1/footprint2);	// 尺度
 			const float wAngle(MINF(POW(fAngle/fOptimAngle, 1.5f), 1.f));	// 公式2
+			// 公式3
 			float wScale;
 			if (fScaleRatio > 1.6f)
 				wScale = SQUARE(1.6f/fScaleRatio);
@@ -515,27 +517,31 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		if (score.points == 0)
 			continue;
 		ASSERT(ID != IDB);
+
 		ViewScore& neighbor = neighbors.AddEmpty();
 		// 计算匹配特征的分布情况（图像覆盖区域）
 		const Point2f boundsA(imageData.GetSize()); // 该视图  图像大小
-		const Point2f boundsB(imageDataB.GetSize());
+		const Point2f boundsB(imageDataB.GetSize());	// 所求图像对的大小
 		ASSERT(pointsA.IsEmpty() && pointsB.IsEmpty());
-		// 保证点在视图内部
+
+		// 保证该图片所有特征点对应的像素坐标在视图内部
 		FOREACHPTR(pIdx, points) {
-			const PointCloud::ViewArr& views = pointcloud.pointViews[*pIdx];    // 点对应的视图
+			const PointCloud::ViewArr& views = pointcloud.pointViews[*pIdx];    // 看到该点的视图数组
 			ASSERT(views.IsSorted());
 			ASSERT(views.FindFirst(ID) != PointCloud::ViewArr::NO_INDEX);
 			if (views.FindFirst(IDB) == PointCloud::ViewArr::NO_INDEX)
 				continue;
 			const PointCloud::Point& point = pointcloud.points[*pIdx];
-			Point2f& ptA = pointsA.AddConstruct(imageData.camera.ProjectPointP(point));
-			Point2f& ptB = pointsB.AddConstruct(imageDataB.camera.ProjectPointP(point));
+			Point2f& ptA = pointsA.AddConstruct(imageData.camera.ProjectPointP(point));	// 世界坐标系变为图像坐标系  该图像
+			Point2f& ptB = pointsB.AddConstruct(imageDataB.camera.ProjectPointP(point));	// 邻居图像
 			if (!imageData.camera.IsInside(ptA, boundsA) || !imageDataB.camera.IsInside(ptB, boundsB)) {
 				pointsA.RemoveLast();
 				pointsB.RemoveLast();
 			}
 		}
 		ASSERT(pointsA.GetSize() == pointsB.GetSize() && pointsA.GetSize() <= score.points);
+
+		// 所有特征点重合区域
 		const float areaA(ComputeCoveredArea<float, 2, 16, false>((const float*)pointsA.Begin(), pointsA.GetSize(), boundsA.ptr()));
 		const float areaB(ComputeCoveredArea<float, 2, 16, false>((const float*)pointsB.Begin(), pointsB.GetSize(), boundsB.ptr()));
 		const float area(MINF(areaA, areaB));
@@ -550,6 +556,7 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 	}
 	neighbors.Sort();
 	#if TD_VERBOSE != TD_VERBOSE_OFF
+
 	// 打印邻居视图
 	if (VERBOSITY_LEVEL > 2) {
 		String msg;
