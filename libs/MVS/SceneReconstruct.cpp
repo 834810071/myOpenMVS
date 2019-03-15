@@ -724,12 +724,6 @@ float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 }
 } // namespace DELAUNAY
 
-// First, iteratively create a Delaunay triangulation of the existing point-cloud by inserting point by point,
-// iif the point to be inserted is not closer than distInsert pixels in at least one of its views to
-// the projection of any of already inserted points.
-// Next, the score is computed for all the edges of the directed graph composed of points as vertices.
-// Finally, graph-cut algorithm is used to split the tetrahedrons in inside and outside,
-// and the surface is such extracted.
 
 // 首先，如果要插入的点 不比其 至少一个视图中的distinsert像素更接近任何已插入点的投影，则通过逐点插入来迭代创建现有点云的Delaunay三角剖分。
 // 接下来，计算由作为顶点的点组成的有向图的所有边的分数。

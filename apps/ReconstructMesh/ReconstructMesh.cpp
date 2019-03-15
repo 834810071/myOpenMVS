@@ -192,11 +192,12 @@ int main(int argc, LPCTSTR* argv)
 	// load project
 	if (!scene.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))
 		return EXIT_FAILURE;
+
 	if (OPT::bMeshExport) {	// 只导出加载项目中包含的网格  默认false  假如存在网格，直接保存
-		// check there is a mesh to export 检查是否有要导出的网格
+		// 检查是否有要导出的网格
 		if (scene.mesh.IsEmpty())
 			return EXIT_FAILURE;
-		// save mesh 保存网格
+		// 保存网格
 		const String fileName(MAKE_PATH_SAFE(OPT::strOutputFileName));
 		scene.mesh.Save(fileName);
 		#if TD_VERBOSE != TD_VERBOSE_OFF
@@ -205,8 +206,6 @@ int main(int argc, LPCTSTR* argv)
 		#endif
 	} else {	// 构建网格
 		if (OPT::strMeshFileName.IsEmpty()) {	// 要清理的网格文件名（跳过重建步骤）  如果网格文件名为空
-			// reset image resolution to the original size and
-			// make sure the image neighbors are initialized before deleting the point-cloud
 			// 将图像分辨率重置为原始大小，并确保在删除点云之前初始化了图像邻居
 			#ifdef RECMESH_USE_OPENMP
 			bool bAbort(false);
@@ -222,7 +221,7 @@ int main(int argc, LPCTSTR* argv)
 				Image& imageData = scene.images[idxImage];
 				if (!imageData.IsValid())
 					continue;
-				// reset image resolution 重设图像分辨率
+				// 重设图像分辨率
 				if (!imageData.ReloadImage(0, false)) {	// 重新加载图像
 					#ifdef RECMESH_USE_OPENMP
 					bAbort = true;
@@ -233,7 +232,7 @@ int main(int argc, LPCTSTR* argv)
 					#endif
 				}
 				imageData.UpdateCamera(scene.platforms);	// 从归一化变为非归一化并计算投影矩阵 因为图片的像素大小改变了
-				// select neighbor views 查找邻居视图
+				// 查找邻居视图
 				if (imageData.neighbors.IsEmpty()) {
 					IndexArr points;
 					scene.SelectNeighborViews(idxImage, points);
@@ -243,7 +242,7 @@ int main(int argc, LPCTSTR* argv)
 			if (bAbort)
 				return EXIT_FAILURE;
 			#endif
-			// reconstruct a coarse mesh from the given point-cloud 由给定点云重构粗网格
+			// 由给定点云重构粗网格
 			TD_TIMER_START();
 			if (OPT::bUseConstantWeight)	// 考虑所有视图权重1，而不是可用权重 默认为true
 				scene.pointcloud.pointWeights.Release();
@@ -262,7 +261,7 @@ int main(int argc, LPCTSTR* argv)
 			}
 			#endif
 		} else {
-			// load existing mesh to clean		加载存在的网格文件清理它
+			//	加载存在的网格文件清理它
 			scene.mesh.Load(MAKE_PATH_SAFE(OPT::strMeshFileName));
 		}
 

@@ -4,6 +4,8 @@
 
 #include "Common.h"
 #include "Scene.h"
+#include <iostream>
+using namespace std;
 // MRF: view selection
 #include "../Math/TRWS/MRFEnergy.h"
 // CGAL: depth-map initialization
@@ -1600,6 +1602,13 @@ bool Scene::DenseReconstruction()
 		VERBOSE("(libs/MVS/SceneDensify.cpp)Preparing images for dense reconstruction completed: %d images (%s)", images.GetSize(), TD_TIMER_GET_FMT().c_str());
 	    }
 
+//    cout << data.images.size() << endl;
+//    cout << "选择邻居视图之前：" << endl;
+//    for (int i = 0; i < data.detphMaps.arrDepthData.size(); ++i) {
+//        const IIndex idxImage(data.images[i]);
+//        cout << "第" << i << "幅图像的邻居图像数量: " << data.detphMaps.arrDepthData[idxImage].neighbors.size()  << endl;
+//    }
+
 	// 选择要用于密度重建的图像
 	{
 		TD_TIMER_START();
@@ -1642,6 +1651,14 @@ bool Scene::DenseReconstruction()
 		VERBOSE("(libs/MVS/SceneDensify.cpp)Selecting images for dense reconstruction completed: %d images (%s)", data.images.GetSize(), TD_TIMER_GET_FMT().c_str());
         }
 	}
+
+
+//	cout << data.images.size() << endl;
+//    cout << "选择邻居视图之后：" << endl;
+//    for (int i = 0; i < data.detphMaps.arrDepthData.size(); ++i) {
+//		const IIndex idxImage(data.images[i]);
+//		cout << "第" << i << "幅图像的邻居图像数量: " << data.detphMaps.arrDepthData[idxImage].neighbors.size()  << endl;
+//	}
 
 	// 初始化要处理的图像队列
 	data.idxImage = 0;
