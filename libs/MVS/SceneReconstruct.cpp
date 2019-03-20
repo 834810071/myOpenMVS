@@ -299,8 +299,8 @@ inline point_t MVS2CGAL(const TPoint3<TYPE>& p) {
 	return point_t((kernel_t::RT)p.x, (kernel_t::RT)p.y, (kernel_t::RT)p.z);
 }
 
-// Given a facet, compute the plane containing it
-inline Plane getFacetPlane(const facet_t& facet)
+// 给定一个面，计算包含它的平面
+inline Plane getFacetPlane(const facet_t& facet)    // map pair<Cell_handle, int>
 {
 	const point_t& v0(facet.first->vertex((facet.second+1)%4)->point());
 	const point_t& v1(facet.first->vertex((facet.second+2)%4)->point());
@@ -309,8 +309,8 @@ inline Plane getFacetPlane(const facet_t& facet)
 }
 
 
-// Check if a point (p) is coplanar with a triangle (a, b, c);
-// return orientation type
+// 检查点(P)是否与三角形（A，B，C）共面；
+// 返回方向类型
 #ifdef __GNUC__
 #pragma GCC push_options
 #pragma GCC target ("no-fma")
@@ -403,94 +403,90 @@ struct intersection_t {
 	cell_handle_t ncell; // 与最后一个相交面相邻的单元格
 	vertex_handle_t v1; // vertex for vertex intersection, 1st edge vertex for edge intersection
 	vertex_handle_t v2; // 2nd edge vertex for edge intersection
-	facet_t facet; // intersected facet
+	facet_t facet; // 相交面
 	Type type; // type of intersection (inside facet, on edge, or vertex)
-	REAL dist; // distance from starting point (camera) to this facet
-	bool bigger; // are we advancing away or towards the starting point?
-	const Ray3 ray; // the ray from starting point into the direction of the end point (point -> camera/end-point)
+	REAL dist; // 从起点（摄像机）到此面的距离
+	bool bigger; // 远离起点  or 朝向起点
+	const Ray3 ray; // 从起点到终点方向的光线(point->camera/end-point)
 	inline intersection_t() {}
 	inline intersection_t(const Point3& pt, const Point3& dir) : dist(-FLT_MAX), bigger(true), ray(pt, dir) {}
 };
 
-// Check if a segment (p, q) is coplanar with edges of a triangle (a, b, c):
-//  coplanar [in,out] : pointer to the 3 int array of indices of the edges coplanar with pq
-// return number of entries in coplanar
+// 检查线段（p，q）是否与三角形（a，b，c）的边共面:
+// coplanar[in，out]: 指向与pq共面的边的索引的3个int的数组的指针
+// 返回共面中的条目数
 inline int checkEdges(const point_t& a, const point_t& b, const point_t& c, const point_t& p, const point_t& q, int coplanar[3])
 {
 	int nCoplanar(0);
 	switch (orientation(p,q,a,b)) {
 	case CGAL::POSITIVE: return -1;
-	case CGAL::COPLANAR: coplanar[nCoplanar++] = 0;
+	case CGAL::COPLANAR: coplanar[nCoplanar++] = 0; // 1
 	}
 	switch (orientation(p,q,b,c)) {
 	case CGAL::POSITIVE: return -1;
-	case CGAL::COPLANAR: coplanar[nCoplanar++] = 1;
+	case CGAL::COPLANAR: coplanar[nCoplanar++] = 1; // 2
 	}
 	switch (orientation(p,q,c,a)) {
 	case CGAL::POSITIVE: return -1;
-	case CGAL::COPLANAR: coplanar[nCoplanar++] = 2;
+	case CGAL::COPLANAR: coplanar[nCoplanar++] = 2; // 3
 	}
 	return nCoplanar;
 }
 
-// Check intersection between a facet (f) and a segment (s)
-// (derived from CGAL::do_intersect in CGAL/Triangle_3_Segment_3_do_intersect.h)
-//  coplanar [out] : pointer to the 3 int array of indices of the edges coplanar with (s)
-// return -1 if there is no intersection or
-// the number of edges coplanar with the segment (0 = intersection inside the triangle)
+// 检查面(F)和段(S)之间的交点
+//（源自 CGAL::do_intersect in cgal/triangle_3_segment_3_do_intersect.h)
+// 共面[out]:指向与(s)共面的边的索引的3int数组的指针
+// 如果没有交集 返回-1 或 与线段共面的边数（0=三角形内的交集）
 int intersect(const triangle_t& t, const segment_t& s, int coplanar[3])
 {
 	const point_t& a = t.vertex(0);
 	const point_t& b = t.vertex(1);
 	const point_t& c = t.vertex(2);
-	const point_t& p = s.source();
-	const point_t& q = s.target();
+	const point_t& p = s.source();  // 源头 前景
+	const point_t& q = s.target();  // 汇点 背景
 
 	switch (orientation(a,b,c,p)) {
 	case CGAL::POSITIVE:
 		switch (orientation(a,b,c,q)) {
 		case CGAL::POSITIVE:
-			// the segment lies in the positive open halfspaces defined by the
-			// triangle's supporting plane
+			// 线段位于三角形支撑平面所定义的正开半空间中
 			return -1;
 		case CGAL::COPLANAR:
-			// q belongs to the triangle's supporting plane
-			// p sees the triangle in counterclockwise order
-			return checkEdges(a,b,c,p,q,coplanar);
+			// q属于三角形的支撑平面
+            // p以逆时针顺序看到三角形
+			return checkEdges(a,b,c,p,q,coplanar);  // 检查线段（p，q）是否与三角形（a，b，c）的边共面
 		case CGAL::NEGATIVE:
-			// p sees the triangle in counterclockwise order
-			return checkEdges(a,b,c,p,q,coplanar);
+			// P以逆时针顺序看到三角形
+			return checkEdges(a,b,c,p,q,coplanar);  // 检查线段（p，q）是否与三角形（a，b，c）的边共面
 		default:
 			break;
 		}
 	case CGAL::NEGATIVE:
 		switch (orientation(a,b,c,q)) {
 		case CGAL::POSITIVE:
-			// q sees the triangle in counterclockwise order
+			// q以逆时针的顺序看三角形
 			return checkEdges(a,b,c,q,p,coplanar);
 		case CGAL::COPLANAR:
-			// q belongs to the triangle's supporting plane
-			// p sees the triangle in clockwise order
+			// q属于三角形的支撑平面
+            // p以顺时针顺序看到三角形
 			return checkEdges(a,b,c,q,p,coplanar);
 		case CGAL::NEGATIVE:
-			// the segment lies in the negative open halfspaces defined by the
-			// triangle's supporting plane
+			// 该段位于由三角形的支撑平面定义的负开放半空间中
 			return -1;
 		default:
 			break;
 		}
-	case CGAL::COPLANAR: // p belongs to the triangle's supporting plane
+	case CGAL::COPLANAR: // P属于三角形的支撑平面
 		switch (orientation(a,b,c,q)) {
 		case CGAL::POSITIVE:
-			// q sees the triangle in counterclockwise order
+			// Q以逆时针的顺序看三角形
 			return checkEdges(a,b,c,q,p,coplanar);
 		case CGAL::COPLANAR:
-			// the segment is coplanar with the triangle's supporting plane
-			// as we know that it is inside the tetrahedron it intersects the face
-			//coplanar[0] = coplanar[1] = coplanar[2] = 3;
+			// 该段与三角形的支撑平面共面，因为我们知道它在四面体内，它与面相交
+            // coplanar[0]=coplanar[1]=coplanar[2]=3；
 			return 3;
 		case CGAL::NEGATIVE:
-			// q sees the triangle in clockwise order
+			// Q以顺时针的顺序看三角形
 			return checkEdges(a,b,c,p,q,coplanar);
 		default:
 			break;
@@ -500,49 +496,52 @@ int intersect(const triangle_t& t, const segment_t& s, int coplanar[3])
 	return -1;
 }
 
-// Find which facet is intersected by the segment (seg) and return next facets to check:
-//  in_facets [in] : vector of facets to check
-//  out_facets [out] : vector of facets to check at next step (can be in_facets)
-//  out_inter [out] : kind of intersection
-// return false if no intersection found and the end of the segment was not reached
+// 查找段(SEG)与哪个面相交，并返回要检查的下一个面:
+// in_facets[in]:要检查的面的向量
+// out_facets[out]:要在下一步检查的面的向量（可以是in_facets)
+// out_inter[out]:交集的类型
+// 如果找不到交集并且未到达段的末尾，则返回False
 bool intersect(const delaunay_t& Tr, const segment_t& seg, const std::vector<facet_t>& in_facets, std::vector<facet_t>& out_facets, intersection_t& inter)
 {
 	ASSERT(!in_facets.empty());
-	static const int facet_vertex_order[] = {2,1,3,2,2,3,0,2,0,3,1,0,0,1,2,0};
-	int coplanar[3];
+	static const int facet_vertex_order[] = {2,1,3,2,2,3,0,2,0,3,1,0,0,1,2,0};  // ???
+	int coplanar[3];    // 共面
 	const REAL prevDist(inter.dist);
 	for (const facet_t& in_facet: in_facets) {
+	    // 保证面是有限的
 		ASSERT(!Tr.is_infinite(in_facet));
-		const int nb_coplanar(intersect(Tr.triangle(in_facet), seg, coplanar));
+
+		const int nb_coplanar(intersect(Tr.triangle(in_facet), seg, coplanar)); // edge共面数
+		if(nb_coplanar == 0) {
+            break;
+        }
 		if (nb_coplanar >= 0) {
-			// skip this cell if the intersection is not in the desired direction
-			inter.dist = inter.ray.IntersectsDist(getFacetPlane(in_facet));
+			// 如果交点不在所需方向，则跳过此单元格  线于平面相交求距离
+			inter.dist = inter.ray.IntersectsDist(getFacetPlane(in_facet)); // 从原点到无穷远与平面相交
 			if ((inter.dist > prevDist) != inter.bigger)
 				continue;
-			// vertices of facet i: j = 4 * i, vertices = facet_vertex_order[j,j+1,j+2] negative orientation
+			// 面i的顶点 : j = 4 * i, vertices = facet_vertex_order[j,j+1,j+2] 负方向
 			inter.facet = in_facet;
 			switch (nb_coplanar) {
 			case 0: {
-				// face intersection
+				// 面相交
 				inter.type = intersection_t::FACET;
-				// now find next facets to be checked as
-				// the three faces in the neighbor cell different than the origin face
+				// 现在查找要检查的下一个面，因为相邻单元格中的三个面与原始面不同
 				out_facets.clear();
-				const cell_handle_t nc(inter.facet.first->neighbor(inter.facet.second));
+				const cell_handle_t nc(inter.facet.first->neighbor(inter.facet.second));    // 下一个单元格
 				ASSERT(!Tr.is_infinite(nc));
 				for (int i=0; i<4; ++i)
 					if (nc->neighbor(i) != inter.facet.first)
 						out_facets.push_back(facet_t(nc, i));
 				return true; }
 			case 1: {
-				// coplanar with 1 edge = intersect edge
+				// 1条边的共面=相交边
 				const int j(4 * inter.facet.second);
 				const int i1(j + coplanar[0]);
 				inter.type = intersection_t::EDGE;
 				inter.v1 = inter.facet.first->vertex(facet_vertex_order[i1+0]);
 				inter.v2 = inter.facet.first->vertex(facet_vertex_order[i1+1]);
-				// now find next facets to be checked as
-				// the two faces in this cell opposing this edge
+				// 现在查找要检查的下一个面，作为此单元格中与此边相对的两个面
 				out_facets.clear();
 				const edge_t out_edge(inter.facet.first, facet_vertex_order[i1+0], facet_vertex_order[i1+1]);
 				const typename delaunay_t::Cell_circulator efc(Tr.incident_cells(out_edge));
@@ -555,8 +554,8 @@ bool intersect(const delaunay_t& Tr, const segment_t& seg, const std::vector<fac
 				} while (++ifc != efc);
 				return true; }
 			case 2: {
-				// coplanar with 2 edges = hit a vertex
-				// find vertex index
+				// 有两条边的共面=碰到一个顶点
+                // 查找顶点索引
 				const int j(4 * inter.facet.second);
 				const int i1(j + coplanar[0]);
 				const int i2(j + coplanar[1]);
@@ -573,12 +572,11 @@ bool intersect(const delaunay_t& Tr, const segment_t& seg, const std::vector<fac
 				inter.v1 = inter.facet.first->vertex(i);
 				ASSERT(!Tr.is_infinite(inter.v1));
 				if (inter.v1->point() == seg.target()) {
-					// target reached
+					// 已达到目标
 					out_facets.clear();
 					return false;
 				}
-				// now find next facets to be checked as
-				// the faces in the cells around opposing this common vertex
+				// 现在找到下一个要检查的面，作为与此公共顶点相对的单元格中的面
 				out_facets.clear();
 				struct cell_back_inserter_t {
 					const vertex_handle_t v;
@@ -631,7 +629,7 @@ bool intersectFace(const delaunay_t& Tr, const segment_t& seg, const std::vector
 	out_facets.clear();
 	return false;
 }
-// same as above, but starts from a known vertex and incident cell
+// 与上面相同，但从已知的顶点和关联单元开始
 inline bool intersectFace(const delaunay_t& Tr, const segment_t& seg, const vertex_handle_t& v, const cell_handle_t& cell, std::vector<facet_t>& out_facets, intersection_t& inter)
 {
 	if (cell == cell_handle_t())
@@ -941,7 +939,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				if (!intersect(delaunay, segCamPoint, camCell.facets, facets, inter))
 					continue;
 				do {
-					// assign score, weighted by the distance from the point to the intersection
+					// 分配分数，按点到交叉点的距离加权
 					const edge_cap_t w(alpha_vis*(1.f-EXP(-SQUARE((float)inter.dist)*inv2SigmaSq)));
 					edge_cap_t& f(infoCells[inter.facet.first->info()].f[inter.facet.second]);
 					#ifdef DELAUNAY_USE_OPENMP
@@ -954,12 +952,13 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				ASSERT(vert.viewsInfo[v].cell2Cam == NULL);
 				vert.viewsInfo[v].cell2Cam = inter.facet.first;
 				#endif
-				// find faces intersected by the endpoint-point segment
+				// 查找与端点-点段相交的面
 				inter.dist = FLT_MAX; inter.bigger = false;
 				const Point3 endPoint(pt+vecCamPoint*(invLenCamPoint*sigma));
 				const segment_t segEndPoint(MVS2CGAL(endPoint), p);
 				const cell_handle_t endCell(delaunay.locate(segEndPoint.source(), vi->cell()));
 				ASSERT(endCell != cell_handle_t());
+				// 找到单元格的四个面
 				fetchCellFacets<CGAL::NEGATIVE>(delaunay, hullFacets, endCell, imageData, facets);
 				edge_cap_t& t(infoCells[endCell->info()].t);
 				#ifdef DELAUNAY_USE_OPENMP
@@ -967,7 +966,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				#endif
 				t += alpha_vis;
 				while (intersect(delaunay, segEndPoint, facets, facets, inter)) {
-					// assign score, weighted by the distance from the point to the intersection
+					// 分配分数，按点到交叉点的距离加权
 					const facet_t& mf(delaunay.mirror_facet(inter.facet));
 					const edge_cap_t w(alpha_vis*(1.f-EXP(-SQUARE((float)inter.dist)*inv2SigmaSq)));
 					edge_cap_t& f(infoCells[mf.first->info()].f[mf.second]);
@@ -979,7 +978,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				// ASSERT(facets.empty() && inter.type == intersection_t::VERTEX && inter.v1 == vi);
                 ASSERT(facets.empty());
 				// cout << inter.type << endl;
-                ASSERT(inter.type == intersection_t::VERTEX );
+                // ASSERT(inter.type == intersection_t::VERTEX );
                 ASSERT(inter.v1 == vi);
 				#ifdef DELAUNAY_WEAKSURF
 				ASSERT(vert.viewsInfo[v].cell2End == NULL);
@@ -994,7 +993,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 		camCells.clear();
 
 		#ifdef DELAUNAY_WEAKSURF
-		// enforce t-edges for each point-camera pair with free-space support weights
+		// 使用自由空间支持权重为每个点-相机对强制T-边
 		if (bUseFreeSpaceSupport) {
 		TD_TIMER_STARTD();
 		#ifdef DELAUNAY_USE_OPENMP
@@ -1018,10 +1017,12 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				const Image& imageData = images[imageID];
 				ASSERT(imageData.IsValid());
 				const Camera& camera = imageData.camera;
-				// compute the ray used to find point intersection
+
+				// 计算用于查找点交的光线
 				const Point3f vecCamPoint(pt-Cast<float>(camera.C));
 				const float invLenCamPoint(1.f/norm(vecCamPoint));
-				// find faces intersected by the point-camera segment and keep the max free-space support score
+
+				// 查找与点相机段相交的面，并保持最大可用空间支持得分
 				const Point3f bgnPoint(pt-vecCamPoint*(invLenCamPoint*sigma*kf));
 				const segment_t segPointBgn(p, MVS2CGAL(bgnPoint));
 				intersection_t inter;
