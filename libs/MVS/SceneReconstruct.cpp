@@ -430,7 +430,7 @@ inline int checkEdges(const point_t& a, const point_t& b, const point_t& c, cons
 	case CGAL::POSITIVE: return -1;
 	case CGAL::COPLANAR: coplanar[nCoplanar++] = 2; // 3
 	}
-	return nCoplanar;
+	return nCoplanar;   // negative 时返回0
 }
 
 // 检查面(F)和段(S)之间的交点
@@ -603,21 +603,22 @@ bool intersect(const delaunay_t& Tr, const segment_t& seg, const std::vector<fac
 	return false;
 }
 
-// same as above, but simplified only to find face intersection (otherwise terminate);
-// terminate if cell containing the segment endpoint is found or if an infinite cell is encountered
+// 与上述相同，但简化为只查找面交点（否则终止）； 如果找到包含段终结点的单元格，或者遇到无限个单元格，则终止
 bool intersectFace(const delaunay_t& Tr, const segment_t& seg, const std::vector<facet_t>& in_facets, std::vector<facet_t>& out_facets, intersection_t& inter)
 {
 	int coplanar[3];
 	for (std::vector<facet_t>::const_iterator it=in_facets.cbegin(); it!=in_facets.cend(); ++it) {
 		ASSERT(!Tr.is_infinite(*it));
+
 		if (intersect(Tr.triangle(*it), seg, coplanar) == 0) {
-			// face intersection
+			// 面相交
 			inter.facet = *it;
 			inter.type = intersection_t::FACET;
-			// now find next facets to be checked as
-			// the three faces in the neighbor cell different than the origin face
+			// 现在查找要检查的下一个面，因为相邻单元格中的三个面与原始面不同
 			out_facets.clear();
 			inter.ncell = inter.facet.first->neighbor(inter.facet.second);
+
+			// 无限个单元格
 			if (Tr.is_infinite(inter.ncell))
 				return false;
 			for (int i=0; i<4; ++i)
@@ -634,6 +635,7 @@ inline bool intersectFace(const delaunay_t& Tr, const segment_t& seg, const vert
 {
 	if (cell == cell_handle_t())
 		return false;
+	// 如果单元格是无限的
 	if (Tr.is_infinite(cell)) {
 		inter.ncell = inter.facet.first = cell;
 		return true;
@@ -645,11 +647,10 @@ inline bool intersectFace(const delaunay_t& Tr, const segment_t& seg, const vert
 }
 
 
-// Given a cell, compute the free-space support for it
+// 给定一个单元格，计算它的可用空间支持。
 edge_cap_t freeSpaceSupport(const delaunay_t& Tr, const std::vector<cell_info_t>& infoCells, const cell_handle_t& cell)
 {
-	// sum up all 4 incoming weights
-	// (corresponding to the 4 facets of the neighbor cells)
+	// 将所有4个输入权重相加（对应于相邻单元格的4个面）
 	edge_cap_t wf(0);
 	for (int i=0; i<4; ++i) {
 		const facet_t& mfacet(Tr.mirror_facet(facet_t(cell, i)));
@@ -685,11 +686,11 @@ inline triangle_vhandles_t getTriangle(cell_handle_t cell, int i)
 		cell->vertex((i+3)&3) );
 }
 
-// Compute the angle between the plane containing the given facet and the cell's circumscribed sphere
-// return cosines of the angle
+// 计算包含给定刻面的平面与单元的外接球面之间的角度
+// return 角的余弦
 float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 {
-	// compute facet normal
+	// 计算面法线
 	if (Tr.is_infinite(facet.first))
 		return 1.f;
 	const triangle_vhandles_t tri(getTriangle(facet.first, facet.second));
@@ -701,7 +702,7 @@ float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 		if (fnLenSq == 0.f)
 			return 0.5f;
 
-	// compute the co-tangent to the circumscribed sphere in one of the vertices
+	// 计算其中一个顶点上的外接球面的余切线
 	#if CGAL_VERSION_NR < 1041101000
 	const Point3f cc(CGAL2MVS<float>(facet.first->circumcenter(Tr.geom_traits())));
 	#else
@@ -722,7 +723,7 @@ float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 	if (ctLenSq == 0.f)
 		return 0.5f;
 
-	// compute the angle between the two vectors
+	// 计算两个向量之间的角度
 	return CLAMP((fn.dot(ct))/SQRT(fnLenSq*ctLenSq), -1.f, 1.f);
 }
 } // namespace DELAUNAY
@@ -1034,7 +1035,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 					if (beta < fs)
 						beta = fs;
 				} while (intersectFace(delaunay, segPointBgn, facets, facets, inter));
-				// find faces intersected by the point-endpoint segment
+				// 查找与点-端点段相交的面
 				const Point3f endPoint(pt+vecCamPoint*(invLenCamPoint*sigma*kb));
 				const segment_t segPointEnd(p, MVS2CGAL(endPoint));
 				if (!intersectFace(delaunay, segPointEnd, vi, vert.viewsInfo[v].cell2End, facets, inter))
@@ -1048,8 +1049,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 						gammaMax = fs;
 				} while (intersectFace(delaunay, segPointEnd, facets, facets, inter));
 				const edge_cap_t gamma((gammaMin+gammaMax)*0.5f);
-				// if the point can be considered an interface point,
-				// enforce the t-edge weight of the end cell
+				// 如果可以将该点视为接口点，则强制执行端单元格的t-边权重
 				const edge_cap_t epsAbs(beta-gamma);
 				const edge_cap_t epsRel(gamma/beta);
 				if (epsRel < kRel && epsAbs > kAbs && gamma < kOutl) {
@@ -1068,13 +1068,13 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 		DEBUG_EXTRA("Delaunay tetrahedras weighting completed: %u cells, %u faces (%s)", delaunay.number_of_cells(), delaunay.number_of_facets(), TD_TIMER_GET_FMT().c_str());
 	}
 
-	// run graph-cut and extract the mesh
+	// 运行Graph-cut并提取网格
 	{
 		TD_TIMER_STARTD();
 
-		// create graph
+		// 创建图
 		MaxFlow<cell_size_t,edge_cap_t> graph(delaunay.number_of_cells());
-		// set weights
+		// 设置权重
 		for (delaunay_t::All_cells_iterator ci=delaunay.all_cells_begin(), ce=delaunay.all_cells_end(); ci!=ce; ++ci) {
 			const cell_size_t ciID(ci->info());
 			const cell_info_t& ciInfo(infoCells[ciID]);
@@ -1090,19 +1090,20 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 			}
 		}
 		infoCells.clear();
-		// find graph-cut solution
+		// 查找Graph-cut解决方案
 		const float maxflow(graph.ComputeMaxFlow());
-		// extract surface formed by the facets between inside/outside cells
-		const size_t nEstimatedNumVerts(delaunay.number_of_vertices());
+		// 提取内部/外部单元格之间的小平面形成的表面
+		const size_t nEstimatedNumVerts(delaunay.number_of_vertices()); // 顶点个数
 		std::unordered_map<void*,Mesh::VIndex> mapVertices;
 		#if defined(_MSC_VER) && (_MSC_VER > 1600)
 		mapVertices.reserve(nEstimatedNumVerts);
 		#endif
 		mesh.vertices.Reserve((Mesh::VIndex)nEstimatedNumVerts);
-		mesh.faces.Reserve((Mesh::FIndex)nEstimatedNumVerts*2);
+		mesh.faces.Reserve((Mesh::FIndex)nEstimatedNumVerts*2); // 面是顶点的2倍 ?
 		for (delaunay_t::All_cells_iterator ci=delaunay.all_cells_begin(), ce=delaunay.all_cells_end(); ci!=ce; ++ci) {
 			const cell_size_t ciID(ci->info());
 			for (int i=0; i<4; ++i) {
+			    // 单元格是无限的，则继续
 				if (delaunay.is_infinite(ci, i)) continue;
 				const cell_handle_t cj(ci->neighbor(i));
 				const cell_size_t cjID(cj->info());
@@ -1120,7 +1121,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 					ASSERT(pairItID.first->second < mesh.vertices.GetSize());
 					face[v] = pairItID.first->second;
 				}
-				// correct face orientation
+				// 正确的面定位
 				if (!ciType)
 					std::swap(face[0], face[2]);
 			}
@@ -1130,9 +1131,9 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 		DEBUG_EXTRA("Delaunay tetrahedras graph-cut completed (%g flow): %u vertices, %u faces (%s)", maxflow, mesh.vertices.GetSize(), mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
 	}
 
-	// fix non-manifold vertices and edges
+	// 固定非流形顶点和边
 	for (unsigned i=0; i<nItersFixNonManifold; ++i)
-		if (!mesh.FixNonManifold())
+		if (!mesh.FixNonManifold()) // Mesh.cpp
 			break;
 	return true;
 }

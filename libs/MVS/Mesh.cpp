@@ -107,7 +107,7 @@ void Mesh::ListIncidenteVertices()
 	}
 }
 
-// extract array of triangles incident to each vertex
+// 提取与每个顶点关联的三角形数组
 void Mesh::ListIncidenteFaces()
 {
 	vertexFaces.Empty();
@@ -121,19 +121,18 @@ void Mesh::ListIncidenteFaces()
 	}
 }
 
-// check each vertex if it is at the boundary or not
-// (make sure you called ListIncidenteFaces() before)
+// 检查每个顶点是否在边界上（请确保在前面调用了listIncidenteFaces（））
 void Mesh::ListBoundaryVertices()
 {
 	vertexBoundary.Empty();
 	vertexBoundary.Resize(vertices.GetSize());
 	vertexBoundary.Memset(0);
 	VertCountMap mapVerts; mapVerts.reserve(12*2);
+
 	FOREACH(idxV, vertices) {
 		const FaceIdxArr& vf = vertexFaces[idxV];
-		// count how many times vertices in the first triangle ring are seen;
-		// usually they are seen two times each as the vertex in not at the boundary
-		// so there are two triangles (on the ring) containing same vertex
+		// 计算第一个三角形环中的顶点出现的次数；
+		// 通常它们被看作不在边界上的顶点，所以有两个三角形（在环上）包含相同的顶点
 		ASSERT(mapVerts.empty());
 		FOREACHPTR(pFaceIdx, vf) {
 			const Face& face = faces[*pFaceIdx];
@@ -143,6 +142,7 @@ void Mesh::ListBoundaryVertices()
 					++mapVerts[idx].count;
 			}
 		}
+
 		for (const auto& vc: mapVerts) {
 			ASSERT(vc.second.count == 1 || vc.second.count == 2);
 			if (vc.second.count != 2) {

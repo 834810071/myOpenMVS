@@ -118,7 +118,7 @@ enum Mask {
 };
 
 struct MeshTexture {
-	// used to render the surface to a view camera
+	// 用于将表面呈现给视图摄像机
 	typedef TImage<cuint32_t> FaceMap;
 	struct RasterMesh : TRasterMesh<RasterMesh> {
 		typedef TRasterMesh<RasterMesh> Base;
@@ -438,19 +438,18 @@ MeshTexture::~MeshTexture()
 	vertexBoundary.Release();
 }
 
-// extract array of triangles incident to each vertex
-// and check each vertex if it is at the boundary or not
+// 提取与每个顶点关联的三角形数组，并检查每个顶点是否在边界处	Mesh.cpp
 void MeshTexture::ListVertexFaces()
 {
-	scene.mesh.EmptyExtra();
-	scene.mesh.ListIncidenteFaces();
-	scene.mesh.ListBoundaryVertices();
+	scene.mesh.EmptyExtra();	// 清空
+	scene.mesh.ListIncidenteFaces();	// 提取与每个顶点关联的三角形数组
+	scene.mesh.ListBoundaryVertices();	// 检查每个顶点是否在边界上（确保在前面调用了listIncidenteFaces（））
 }
 
-// extract array of faces viewed by each image
+// 提取每个图像看到的面数组
 bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThreshold)
 {
-	// create vertices octree
+	// 创建顶点八叉树
 	facesDatas.Resize(faces.GetSize());
 	typedef std::unordered_set<FIndex> CameraFaces;
 	struct FacesInserter {
@@ -476,7 +475,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 	Octree::LogDebugInfo(info);
 	#endif
 
-	// extract array of faces viewed by each image
+	// 提取每个图像看到的面数组
 	Util::Progress progress(_T("Initialized views"), images.GetSize());
 	typedef float real;
 	TImage<real> imageGradMag;
@@ -486,6 +485,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 	#ifdef TEXOPT_USE_OPENMP
 	bool bAbort(false);
 	#pragma omp parallel for private(imageGradMag, mGrad, faceMap, depthMap)
+	// 遍历图像
 	for (int_t idx=0; idx<(int_t)images.GetSize(); ++idx) {
 		#pragma omp flush (bAbort)
 		if (bAbort) {
@@ -501,7 +501,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 			++progress;
 			continue;
 		}
-		// load image
+		// 加载图像
 		unsigned level(nResolutionLevel);
 		const unsigned imageSize(imageData.RecomputeMaxResolution(level, nMinResolution));
 		if ((imageData.image.empty() || MAXF(imageData.width,imageData.height) != imageSize) && !imageData.ReloadImage(imageSize)) {
@@ -514,15 +514,15 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 			#endif
 		}
 		imageData.UpdateCamera(scene.platforms);
-		// compute gradient magnitude
-		imageData.image.toGray(imageGradMag, cv::COLOR_BGR2GRAY, true);
+		// 计算梯度幅度
+		imageData.image.toGray(imageGradMag, cv::COLOR_BGR2GRAY, true);	// 转换为灰度图像
 		cv::Mat grad[2];
 		mGrad[0].resize(imageGradMag.rows, imageGradMag.cols);
 		grad[0] = cv::Mat(imageGradMag.rows, imageGradMag.cols, cv::DataType<real>::type, (void*)mGrad[0].data());
 		mGrad[1].resize(imageGradMag.rows, imageGradMag.cols);
 		grad[1] = cv::Mat(imageGradMag.rows, imageGradMag.cols, cv::DataType<real>::type, (void*)mGrad[1].data());
 		#if 1
-		cv::Sobel(imageGradMag, grad[0], cv::DataType<real>::type, 1, 0, 3, 1.0/8.0);
+		cv::Sobel(imageGradMag, grad[0], cv::DataType<real>::type, 1, 0, 3, 1.0/8.0);	// Sobel算子
 		cv::Sobel(imageGradMag, grad[1], cv::DataType<real>::type, 0, 1, 3, 1.0/8.0);
 		#elif 1
 		const TMatrix<real,3,5> kernel(CreateDerivativeKernel3x5());
@@ -533,14 +533,14 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 		cv::filter2D(imageGradMag, grad[0], cv::DataType<real>::type, kernel);
 		cv::filter2D(imageGradMag, grad[1], cv::DataType<real>::type, kernel.t());
 		#endif
-		(TImage<real>::EMatMap)imageGradMag = (mGrad[0].cwiseAbs2()+mGrad[1].cwiseAbs2()).cwiseSqrt();
-		// select faces inside view frustum
+		(TImage<real>::EMatMap)imageGradMag = (mGrad[0].cwiseAbs2()+mGrad[1].cwiseAbs2()).cwiseSqrt();	// 矩阵和向量的系数方向运算符
+		// 选择视图截头体内的面
 		CameraFaces cameraFaces;
 		FacesInserter inserter(vertexFaces, cameraFaces);
 		typedef TFrustum<float,5> Frustum;
 		const Frustum frustum(Frustum::MATRIX3x4(((PMatrix::CEMatMap)imageData.camera.P).cast<float>()), (float)imageData.width, (float)imageData.height);
 		octree.Traverse(frustum, inserter);
-		// project all triangles in this view and keep the closest ones
+		// 投影此视图中的所有三角形并保持最近的三角形
 		faceMap.create(imageData.height, imageData.width);
 		depthMap.create(imageData.height, imageData.width);
 		RasterMesh rasterer(vertices, imageData.camera, depthMap, faceMap);
@@ -550,7 +550,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 			rasterer.idxFace = idxFace;
 			rasterer.Project(facet);
 		}
-		// compute the projection area of visible faces
+		// 计算可见面的投影面积
 		#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
 		CLISTDEF0IDX(uint32_t,FIndex) areas(faces.GetSize());
 		areas.Memset(0);
@@ -572,7 +572,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 				#else
 				if (faceDatas.IsEmpty() || faceDatas.Last().idxView != idxView) {
 				#endif
-					// create new face-data
+					// 创建新的face-data
 					FaceData& faceData = faceDatas.AddEmpty();
 					faceData.idxView = idxView;
 					faceData.quality = imageGradMag(j,i);
@@ -580,7 +580,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 					faceData.color = imageData.image(j,i);
 					#endif
 				} else {
-					// update face-data
+					// 更新 face-data
 					ASSERT(!faceDatas.IsEmpty());
 					FaceData& faceData = faceDatas.Last();
 					ASSERT(faceData.idxView == idxView);
@@ -611,8 +611,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 
 	#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
 	if (fOutlierThreshold > 0) {
-		// try to detect outlier views for each face
-		// (views for which the face is occluded by a dynamic object in the scene, ex. pedestrians)
+		// 尝试检测每个面的异常视图（被场景中的动态对象遮挡的视图，例如行人）
 		FOREACHPTR(pFaceDatas, facesDatas)
 			FaceOutlierDetection(*pFaceDatas, fOutlierThreshold);
 	}
@@ -694,20 +693,19 @@ inline T MultiGaussUnnormalized(const Eigen::Matrix<T,N,1>& X, const Eigen::Matr
 	return MultiGaussUnnormalized<T,N>(X - mu, covarianceInv);
 }
 
-// decrease the quality of / remove all views in which the face's projection
-// has a much different color than in the majority of views
+// 降低/删除face投影颜色与大多数视图不同的所有视图的质量
 bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) const
 {
-	// reject all views whose gauss value is below this threshold
+	// 拒绝所有高斯值低于此阈值的视图
 	if (thOutlier <= 0)
 		thOutlier = 6e-2f;
 
-	const float minCovariance(1e-3f); // if all covariances drop below this the outlier detection aborted
+	const float minCovariance(1e-3f); // 如果所有协方差都低于此值，则异常值检测将中止
 
 	const unsigned maxIterations(10);
 	const unsigned minInliers(4);
 
-	// init colors array
+	// 初始化颜色(color)数组
 	if (faceDatas.GetSize() <= minInliers)
 		return false;
 	Eigen::Matrix3Xd colorsAll(3, faceDatas.GetSize());
@@ -717,30 +715,28 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 		inliers[i] = true;
 	}
 
-	// perform outlier removal; abort if something goes wrong
-	// (number of inliers below threshold or can not invert the covariance)
+	// 执行异常值删除； 如果出现错误（低于阈值的inlier数或无法反转协方差），则中止
 	size_t numInliers(faceDatas.GetSize());
 	Eigen::Vector3d mean;
 	Eigen::Matrix3d covariance;
 	Eigen::Matrix3d covarianceInv;
 	for (unsigned iter = 0; iter < maxIterations; ++iter) {
-		// compute the mean color and color covariance only for inliers
+		// 仅计算内嵌项(inlier)的平均颜色和颜色协方差
 		const Eigen::Block<Eigen::Matrix3Xd,3,Eigen::Dynamic,!Eigen::Matrix3Xd::IsRowMajor> colors(colorsAll.leftCols(numInliers));
 		mean = colors.rowwise().mean();
 		const Eigen::Matrix3Xd centered(colors.colwise() - mean);
 		covariance = (centered * centered.transpose()) / double(colors.cols() - 1);
 
-		// stop if all covariances gets very small
+		// 如果所有协方差变得非常小，则停止
 		if (covariance.array().abs().maxCoeff() < minCovariance) {
-			// remove the outliers
+			// 去除outliers
 			RFOREACH(i, faceDatas)
 				if (!inliers[i])
 					faceDatas.RemoveAt(i);
 			return true;
 		}
 
-		// invert the covariance matrix
-		// (FullPivLU not the fastest, but gives feedback about numerical stability during inversion)
+		// 反演协方差矩阵 （FullPivLU不是最快的，但在反演期间给出数值稳定性的反馈）
 		const Eigen::FullPivLU<Eigen::Matrix3d> lu(covariance);
 		if (!lu.isInvertible())
 			return false;
@@ -800,14 +796,14 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 
 bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmoothness)
 {
-	// extract array of triangles incident to each vertex
+	// 提取与每个顶点关联的三角形数组
 	ListVertexFaces();
 
-	// create texture patches
+	// 创建纹理贴图
 	{
-		// list all views for each face
+		// 列出每个面对应的所有视图
 		FaceDataViewArr facesDatas;
-		if (!ListCameraFaces(facesDatas, fOutlierThreshold))
+		if (!ListCameraFaces(facesDatas, fOutlierThreshold))	// fOutlierThreshold default(6e-2f)
 			return false;
 
 		// create faces graph
@@ -1941,12 +1937,12 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 	}
 }
 
-// texture mesh
+// 纹理网格
 bool Scene::TextureMesh(unsigned nResolutionLevel, unsigned nMinResolution, float fOutlierThreshold, float fRatioDataSmoothness, bool bGlobalSeamLeveling, bool bLocalSeamLeveling, unsigned nTextureSizeMultiple, unsigned nRectPackingHeuristic, Pixel8U colEmpty)
 {
 	MeshTexture texture(*this, nResolutionLevel, nMinResolution);
 
-	// assign the best view to each face
+	// 为每个面分配最佳视图
 	{
 		TD_TIMER_STARTD();
 		if (!texture.FaceViewSelection(fOutlierThreshold, fRatioDataSmoothness))
@@ -1954,7 +1950,7 @@ bool Scene::TextureMesh(unsigned nResolutionLevel, unsigned nMinResolution, floa
 		DEBUG_EXTRA("Assigning the best view to each face completed: %u faces (%s)", mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
 	}
 
-	// generate the texture image and atlas
+	// 生成纹理图像和地图集
 	{
 		TD_TIMER_STARTD();
 		texture.GenerateTexture(bGlobalSeamLeveling, bLocalSeamLeveling, nTextureSizeMultiple, nRectPackingHeuristic, colEmpty);
