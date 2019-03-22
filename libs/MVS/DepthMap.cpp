@@ -9,7 +9,9 @@
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/property_map.h>
 #include <CGAL/pca_estimate_normals.h>
+#include <iostream>
 
+using namespace std;
 using namespace MVS;
 
 
@@ -779,10 +781,13 @@ bool MVS::ExportDepthMap(const String& fileName, const DepthMap& depthMap, Depth
 	const Depth deltaDepth = maxDepth - minDepth;
 	// save image
 	Image8U img(depthMap.size());
+    //cout << depthMap.area() << " ";
 	for (int i=depthMap.area(); --i >= 0; ) {
 		const Depth depth = depthMap[i];
 		img[i] = (depth > 0 ? (uint8_t)CLAMP((maxDepth-depth)*255.f/deltaDepth, 0.f, 255.f) : 0);
+
 	}
+	//cout << endl;
 	return img.Save(fileName);
 } // ExportDepthMap
 /*----------------------------------------------------------------*/
@@ -803,7 +808,9 @@ bool MVS::ExportNormalMap(const String& fileName, const NormalMap& normalMap)
 					CLAMP(ROUND2INT(    -n.z *255.0f), 0, 255)
 				);
 		} (normalMap[i]);
+
 	}
+	//cout << normalMap.area() << " " << endl;
 	return img.Save(fileName);
 } // ExportNormalMap
 /*----------------------------------------------------------------*/

@@ -529,9 +529,9 @@ bool DepthMapsData::InitDepthMap(DepthData& depthData)
 		const Point3f c2(camera.TransformPointI2C(i2));
 		const Point3f edge1(c1-c0);
 		const Point3f edge2(c2-c0);
-		data.normal = normalized(edge2.cross(edge1));	// 法线
+		data.normal = normalized(edge2.cross(edge1));	// 法线  求c0
 		data.normalPlane = data.normal * INVERT(data.normal.dot(c0));	// 法平面  公式2
-		// 绘制三角形，并为每个像素计算深度作为光线与平面的交点。
+		// 绘制三角形，并为每个像素计算深度作为光线与平面的交点。 对给定的三角形进行光栅化，输出三角形中每个像素的位置；
 		Image8U::RasterizeTriangle(reinterpret_cast<const Point2f&>(i2), reinterpret_cast<const Point2f&>(i1), reinterpret_cast<const Point2f&>(i0), data);
 	}
 
@@ -634,7 +634,7 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 // 给定同一场景的两个视图，我们将重建深度图的视图称为“参考图像”，将另一个视图称为“目标图像”。
 
 // 第一步，通过在可用稀疏点之间插值来近似整个深度图。
-// 接下来，深度图将从上/左到下/右角传递，并在接下来的每个步骤中使用相反的SENS。
+// 第二步，深度图将从上/左到下/右角传递，并在接下来的每个步骤中使用相反的SENS。
 // 对于每个像素，如果邻居的NCC分数 更好，则首先用其邻居估计替换当前深度估计。
 // 其次，通过在当前深度和正常值周围尝试随机估计来精化估计值，以保持得分最佳的估计值。
 // 估计可以在任何点停止，通常2-3次迭代就足够收敛了。
@@ -650,7 +650,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	DepthData& depthData(arrDepthData[idxImage]);
 	ASSERT(depthData.images.GetSize() > 1 && !depthData.points.IsEmpty());
 
-	const DepthData::ViewData& image(depthData.images.First()); // 当前视图
+	const DepthData::ViewData& image(depthData.images.First()); // 当前视图 参考视图
 	ASSERT(!image.image.empty() && !depthData.images[1].image.empty()); // （image.image 图像浮动强度 float类型）
 
 	const Image8U::Size size(image.image.size());  // 图像尺寸
@@ -733,7 +733,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 			pThread->join();
 		estimators.Release();
 		#if TD_VERBOSE != TD_VERBOSE_OFF
-		// 将粗略深度图保存为图像 没有用
+		// 将粗略深度图保存为图像
 		if (g_nVerbosityLevel > 4) {
 			ExportDepthMap(ComposeDepthFilePath(idxImage, "rough.png"), depthData.depthMap);
 			ExportNormalMap(ComposeDepthFilePath(idxImage, "rough.normal.png"), depthData.normalMap);
@@ -762,7 +762,9 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		// 将中间深度图另存为图像   没用
 		if (g_nVerbosityLevel > 4) {
 			const String path(ComposeDepthFilePath(image.pImageData-scene.images.Begin(), "iter")+String::ToString(iter));
+			//cout << endl << "depthMap.area()------------------------------------" << endl;
 			ExportDepthMap(path+".png", depthData.depthMap);
+			//cout << "normalMap.area()-----------------------------------" << endl;
 			ExportNormalMap(path+".normal.png", depthData.normalMap);
 			ExportPointCloud(path+".ply", *depthData.images.First().pImageData, depthData.depthMap, depthData.normalMap);
 		}
@@ -785,6 +787,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 			pThread->join();
 		estimators.Release();
 	}
+
 
 	DEBUG_EXTRA("(libs/MVS/SceneDensify.cpp)Depth-map for image %3u %s: %dx%d (%s)", image.pImageData-scene.images.Begin(),
 		depthData.images.GetSize() > 2 ?
