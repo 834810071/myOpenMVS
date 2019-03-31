@@ -682,9 +682,8 @@ struct VertexInfo {
 	}
 };
 
-// find all non-manifold edges/vertices and for each, duplicate the vertex,
-// assigning the new vertex to the smallest connected set of faces;
-// return true if problems were found
+// 找到所有的非流形边/顶点，对每个非流形边/顶点复制顶点，将新顶点分配给最小的连通面集；
+// 如果发现问题，则返回true
 bool Mesh::FixNonManifold()
 {
 	TD_TIMER_STARTD();

@@ -990,7 +990,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
                 ASSERT(facets.empty());
 				// cout << inter.type << endl;
                 // ASSERT(inter.type == intersection_t::VERTEX );
-                ASSERT(inter.v1 == vi);
+                // ASSERT(inter.v1 == vi);
 				#ifdef DELAUNAY_WEAKSURF
 				ASSERT(vert.viewsInfo[v].cell2End == NULL);
 				vert.viewsInfo[v].cell2End = inter.facet.first;
@@ -1043,7 +1043,7 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 					continue;
 				edge_cap_t beta(0);
 				do {    // 公式2
-					const edge_cap_t fs(freeSpaceSupport(delaunay, infoCells, inter.facet.first));
+					const edge_cap_t fs(freeSpaceSupport(delaunay, infoCells, inter.facet.first));  //
 					if (beta < fs)
 						beta = fs;
 				} while (intersectFace(delaunay, segPointBgn, facets, facets, inter));
@@ -1053,9 +1053,10 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				const segment_t segPointEnd(p, MVS2CGAL(endPoint));
 				if (!intersectFace(delaunay, segPointEnd, vi, vert.viewsInfo[v].cell2End, facets, inter))
 					continue;
-				edge_cap_t gammaMin(FLT_MAX), gammaMax(0);
+
+				edge_cap_t gammaMin(FLT_MAX), gammaMax(0);  //
 				do {
-					const edge_cap_t fs(freeSpaceSupport(delaunay, infoCells, inter.facet.first));
+					const edge_cap_t fs(freeSpaceSupport(delaunay, infoCells, inter.facet.first));  //
 					if (gammaMin > fs)
 						gammaMin = fs;
 					if (gammaMax < fs)
@@ -1064,8 +1065,8 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 				const edge_cap_t gamma((gammaMin+gammaMax)*0.5f);   // 公式2
 
 				// 如果可以将该点视为接口点，则强制执行端单元格的t-边权重
-				const edge_cap_t epsAbs(beta - gamma);
-				const edge_cap_t epsRel(gamma / beta);
+				const edge_cap_t epsAbs(beta - gamma);  //
+				const edge_cap_t epsRel(gamma / beta);  //
 
 				if (epsRel < kRel && epsAbs > kAbs && gamma < kOutl) {  // 公式6 对应论文
 					edge_cap_t& t(infoCells[inter.ncell->info()].t);
@@ -1107,8 +1108,8 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 		}
 		infoCells.clear();
 
-		// 查找Graph-cut解决方案
-		const float maxflow(graph.ComputeMaxFlow());
+		// 查找Graph-cut解决方案  todo
+		const float maxflow(graph.ComputeMaxFlow());    // 论文24  2
 		// 提取内部/外部单元格之间的小平面形成的表面
 		const size_t nEstimatedNumVerts(delaunay.number_of_vertices()); // 顶点个数
 		std::unordered_map<void*,Mesh::VIndex> mapVertices;
@@ -1117,24 +1118,34 @@ bool Scene::ReconstructMesh(float distInsert, bool bUseFreeSpaceSupport, unsigne
 		#endif
 		mesh.vertices.Reserve((Mesh::VIndex)nEstimatedNumVerts);
 		mesh.faces.Reserve((Mesh::FIndex)nEstimatedNumVerts*2); // 面是顶点的2倍 ?
+
+		// 遍历网格  todo
 		for (delaunay_t::All_cells_iterator ci=delaunay.all_cells_begin(), ce=delaunay.all_cells_end(); ci!=ce; ++ci) {
 			const cell_size_t ciID(ci->info());
+			// 一个网格四面体有四个面
 			for (int i=0; i<4; ++i) {
 			    // 单元格是无限的，则继续
 				if (delaunay.is_infinite(ci, i)) continue;
+
 				const cell_handle_t cj(ci->neighbor(i));
-				const cell_size_t cjID(cj->info());
+				const cell_size_t cjID(cj->info()); // 邻居
 				if (ciID < cjID) continue;
-				const bool ciType(graph.IsNodeOnSrcSide(ciID));
-				if (ciType == graph.IsNodeOnSrcSide(cjID)) continue;
+
+				const bool ciType(graph.IsNodeOnSrcSide(ciID)); // 当前节点类型 (s or t)
+				if (ciType == graph.IsNodeOnSrcSide(cjID)) continue;    // 邻居节点类型应当与当前节点类型不一样
+
 				Mesh::Face& face = mesh.faces.AddEmpty();
-				const triangle_vhandles_t tri(getTriangle(ci, i));
+				const triangle_vhandles_t tri(getTriangle(ci, i));  // 当前单元格 第i面
+				// 遍历三角形三条边add_tweights
 				for (int v=0; v<3; ++v) {
 					const vertex_handle_t vh(tri.verts[v]);
 					ASSERT(vh->point() == delaunay.triangle(ci,i)[v]);
+
 					const auto pairItID(mapVertices.insert(std::make_pair(vh.for_compact_container(), (Mesh::VIndex)mesh.vertices.GetSize())));
+
 					if (pairItID.second)
 						mesh.vertices.Insert(CGAL2MVS<Mesh::Vertex::Type>(vh->point()));
+
 					ASSERT(pairItID.first->second < mesh.vertices.GetSize());
 					face[v] = pairItID.first->second;
 				}
