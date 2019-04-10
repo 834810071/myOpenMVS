@@ -54,7 +54,7 @@ public:
 	String name; // image file name (relative path)	相对路径
 	Camera camera; // view's pose
 	uint32_t width, height; // image size
-	Image8U3 image; // image color pixels 图像颜色像素
+	Image8U3 image; // 图像颜色像素
 	ViewScoreArr neighbors; // score&store the neighbor images 记分和存储邻居图像
 	float scale; // image scale relative to the original size 相对于原始大小的图像缩放
 	float avgDepth; // average depth of the points seen by this camera 此相机所见点的平均深度

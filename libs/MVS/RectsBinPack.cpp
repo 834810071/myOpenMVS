@@ -472,9 +472,7 @@ void MaxRectsBinPack::PruneFreeList()
 }
 
 
-// Compute the appropriate texture atlas size
-// (an approximation since the packing is a heuristic)
-// (if mult > 0, the returned size is a multiple of that value, otherwise is a power of two)
+// 计算合适的纹理图谱大小（因为打包是一个启发式的近似）（如果MULT>0，返回的大小是该值的倍数，否则是2的幂）
 int MaxRectsBinPack::ComputeTextureSize(const RectArr& rects, int mult)
 {
 	int area(0), maxSizePatch(0);
@@ -485,16 +483,15 @@ int MaxRectsBinPack::ComputeTextureSize(const RectArr& rects, int mult)
 		if (maxSizePatch < sizePatch)
 			maxSizePatch = sizePatch;
 	}
-	// compute the approximate area
-	// considering the best case scenario for the packing algorithm: 0.9 fill
+	// 考虑打包算法的最佳情况:0.9填充，计算近似面积
 	area = CEIL2INT((1.f/0.9f)*(float)area);
-	// compute texture size...
+	// 计算纹理大小...
 	const int sizeTex(MAXF(CEIL2INT(SQRT((float)area)), maxSizePatch));
 	if (mult > 0) {
-		// ... as multiple of mult
+		// …MULT的倍数
 		return ((sizeTex+mult-1)/mult)*mult;
 	}
-	// ... as power of two
+	// ... 二的幂
 	return POWI((int)2, CEIL2INT(LOGN((float)sizeTex) / LOGN(2.f)));
 }
 /*----------------------------------------------------------------*/

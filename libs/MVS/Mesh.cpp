@@ -114,7 +114,7 @@ void Mesh::ListIncidenteFaces()
 	vertexFaces.Resize(vertices.GetSize());
 	FOREACH(i, faces) {
 		const Face& face = faces[i];
-		for (int v=0; v<3; ++v) {
+		for (int v=0; v<3; ++v) {	// face[0] -- i face[1] -- i face[2] -- i  face的第[]个顶点 -- 第i个面
 			ASSERT(vertexFaces[face[v]].Find(i) == FaceIdxArr::NO_INDEX);
 			vertexFaces[face[v]].Insert(i);
 		}
@@ -127,17 +127,19 @@ void Mesh::ListBoundaryVertices()
 	vertexBoundary.Empty();
 	vertexBoundary.Resize(vertices.GetSize());
 	vertexBoundary.Memset(0);
-	VertCountMap mapVerts; mapVerts.reserve(12*2);
+	VertCountMap mapVerts;
+	mapVerts.reserve(12*2);
 
+	// 每个顶点的所在的6个面中， 每个面中的三个点 其中有两个点与当前顶点不一致。
 	FOREACH(idxV, vertices) {
-		const FaceIdxArr& vf = vertexFaces[idxV];
+		const FaceIdxArr& vf = vertexFaces[idxV];	// 该顶点对应的6个面
 		// 计算第一个三角形环中的顶点出现的次数；
 		// 通常它们被看作不在边界上的顶点，所以有两个三角形（在环上）包含相同的顶点
 		ASSERT(mapVerts.empty());
 		FOREACHPTR(pFaceIdx, vf) {
-			const Face& face = faces[*pFaceIdx];
-			for (int i=0; i<3; ++i) {
-				const VIndex idx(face[i]);
+			const Face& face = faces[*pFaceIdx];    // 6个面中的第i个面
+			for (int i=0; i<3; ++i) {	// (x, y, z)
+				const VIndex idx(face[i]);  // 该面的三个顶点索引
 				if (idx != idxV)
 					++mapVerts[idx].count;
 			}
@@ -252,6 +254,7 @@ void Mesh::GetFaceFaces(FIndex f, FaceIdxArr& afaces) const
 	const FaceIdxArr& faces1 = vertexFaces[face[1]];
 	const FaceIdxArr& faces2 = vertexFaces[face[2]];
 	std::unordered_set<FIndex> setFaces(faces1.Begin(), faces1.End());
+
 	FOREACHPTR(pIdxFace, faces0) {
 		if (f != *pIdxFace && setFaces.find(*pIdxFace) != setFaces.end())
 			afaces.InsertSortUnique(*pIdxFace);
@@ -261,6 +264,7 @@ void Mesh::GetFaceFaces(FIndex f, FaceIdxArr& afaces) const
 			afaces.InsertSortUnique(*pIdxFace);
 	}
 	setFaces.clear();
+
 	setFaces.insert(faces2.Begin(), faces2.End());
 	FOREACHPTR(pIdxFace, faces0) {
 		if (f != *pIdxFace && setFaces.find(*pIdxFace) != setFaces.end())
