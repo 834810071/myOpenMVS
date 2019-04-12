@@ -23,7 +23,7 @@
 namespace SEACAVE {
 
 // S T R U C T S ///////////////////////////////////////////////////
-
+// 循环置信传播算法的基本实现
 // basic implementation of the loopy belief propagation algorithm
 // based on a code originally written by Michael Waechter:
 // https://github.com/nmoehrle/mvs-texturing

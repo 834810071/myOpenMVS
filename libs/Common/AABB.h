@@ -33,7 +33,7 @@ public:
 	enum { numCorners = (DIMS==1 ? 2 : (DIMS==2 ? 4 : 8)) }; // 2^DIMS
 	enum { numScalar = (2*DIMS) };
 
-	POINT ptMin, ptMax;	// box extreme points
+	POINT ptMin, ptMax;	// 方框极值点
 
 	//---------------------------------------
 

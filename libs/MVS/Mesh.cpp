@@ -121,7 +121,8 @@ void Mesh::ListIncidenteFaces()
 	}
 }
 
-// 检查每个顶点是否在边界上（请确保在前面调用了listIncidenteFaces（））
+// 检查每个顶点是否在边界上（确保前面调用了listIncidenteFaces（））
+// 当该顶点所在的三角形中仅有两个顶点说明该三角型是一条边  属于边界
 void Mesh::ListBoundaryVertices()
 {
 	vertexBoundary.Empty();
@@ -129,17 +130,35 @@ void Mesh::ListBoundaryVertices()
 	vertexBoundary.Memset(0);
 	VertCountMap mapVerts;
 	mapVerts.reserve(12*2);
-
+//	int count  = 0;
+//	int vcount = 0;
+	//int max = 0;
+	//int min = 0;
 	// 每个顶点的所在的6个面中， 每个面中的三个点 其中有两个点与当前顶点不一致。
 	FOREACH(idxV, vertices) {
-		const FaceIdxArr& vf = vertexFaces[idxV];	// 该顶点对应的6个面
+		const FaceIdxArr& vf = vertexFaces[idxV];	// 该顶点对应的n个面  最多存在21个面 最少是0个面
 		// 计算第一个三角形环中的顶点出现的次数；
 		// 通常它们被看作不在边界上的顶点，所以有两个三角形（在环上）包含相同的顶点
 		ASSERT(mapVerts.empty());
+//		int index = 0;
+//		vcount++;
+//		FOREACHPTR(pFaceIdx, vf)
+//		{
+//			index++;
+//			if (index > max) {
+//				max = index;
+//			}
+//			if (index < min) {
+//				min = index;
+//			}
+//
+//		}
 		FOREACHPTR(pFaceIdx, vf) {
-			const Face& face = faces[*pFaceIdx];    // 6个面中的第i个面
+			const Face& face = faces[*pFaceIdx];    // n个面中的第i个面
 			for (int i=0; i<3; ++i) {	// (x, y, z)
 				const VIndex idx(face[i]);  // 该面的三个顶点索引
+				// idx -> 顶点对应的n个面上的3个顶点索引
+				// idxV -> 顶点索引
 				if (idx != idxV)
 					++mapVerts[idx].count;
 			}
@@ -152,8 +171,30 @@ void Mesh::ListBoundaryVertices()
 				break;
 			}
 		}
+//		int a = 0,b = 0, c = 0, d = 0, o = 0;
+//		for (const auto& vc : mapVerts) {
+//			switch(vc.second.count) {
+//				case 0:
+//					a++;
+//					break;
+//				case 1:
+//					b++;
+//					break;
+//				case 2:
+//					c++;
+//					break;
+//				case 3:
+//					d++;
+//					break;
+//				default:
+//					o++;
+//			}
+//		}
+		//cout << a << "\t" << b << "\t" << c << "\t" << d << "\t" << o << endl;
 		mapVerts.clear();
 	}
+	//cout << vcount << "\t" << count << endl;
+	//cout << max << "\t" << min << endl;
 }
 
 
@@ -254,11 +295,12 @@ void Mesh::GetFaceFaces(FIndex f, FaceIdxArr& afaces) const
 	const FaceIdxArr& faces1 = vertexFaces[face[1]];
 	const FaceIdxArr& faces2 = vertexFaces[face[2]];
 	std::unordered_set<FIndex> setFaces(faces1.Begin(), faces1.End());
-
+	// 0 和 1 有重复的插入
 	FOREACHPTR(pIdxFace, faces0) {
 		if (f != *pIdxFace && setFaces.find(*pIdxFace) != setFaces.end())
 			afaces.InsertSortUnique(*pIdxFace);
 	}
+	// 2和1 有重复的插入
 	FOREACHPTR(pIdxFace, faces2) {
 		if (f != *pIdxFace && setFaces.find(*pIdxFace) != setFaces.end())
 			afaces.InsertSortUnique(*pIdxFace);
@@ -266,6 +308,7 @@ void Mesh::GetFaceFaces(FIndex f, FaceIdxArr& afaces) const
 	setFaces.clear();
 
 	setFaces.insert(faces2.Begin(), faces2.End());
+	// 0 和 2 有重复的插入
 	FOREACHPTR(pIdxFace, faces0) {
 		if (f != *pIdxFace && setFaces.find(*pIdxFace) != setFaces.end())
 			afaces.InsertSortUnique(*pIdxFace);

@@ -19,7 +19,6 @@
 
 namespace MVS {
 
-// a mesh represented by a list vertices and triangles (faces)
 // 由列表顶点和三角形（面）表示的网格。
 class MVS_API Mesh
 {
@@ -45,7 +44,7 @@ public:
 	typedef TPoint2<Type> TexCoord;
 	typedef cList<TexCoord,const TexCoord&,0,8192,FIndex> TexCoordArr;
 
-	// used to find adjacent face 用于查找相邻面
+	//  用于查找相邻面
 	struct FaceCount {
 		int count;
 		inline FaceCount() : count(0) {}
@@ -60,15 +59,15 @@ public:
 	VertexArr vertices;
 	FaceArr faces;
 
-	NormalArr vertexNormals; // for each vertex, the normal to the surface in that point (optional) 对于每个顶点，该点中曲面的法线（可选）
-	VertexVerticesArr vertexVertices; // for each vertex, the list of adjacent vertices (optional) 对于每个顶点，相邻顶点的列表（可选）
-	VertexFacesArr vertexFaces; // for each vertex, the list of faces containing it (optional) 对于每个顶点，包含该顶点的面列表（可选）
-	BoolArr vertexBoundary; // for each vertex, stores if it is at the boundary or not (optional) 对于每个顶点，存储它是否在边界处（可选）
+	NormalArr vertexNormals; // 对于每个顶点，该点中曲面的法线（可选）
+	VertexVerticesArr vertexVertices; //  对于每个顶点，相邻顶点的列表（可选）
+	VertexFacesArr vertexFaces; // 对于每个顶点，包含该顶点的面列表（可选）
+	BoolArr vertexBoundary; // 对于每个顶点，存储它是否在边界处（可选）
 
-	NormalArr faceNormals; // for each face, the normal to it (optional) 对于每个面，它的法线（可选）
-	TexCoordArr faceTexcoords; // for each face, the texture-coordinates corresponding to the contained vertices (optional) 对于每个面，对应于所包含顶点的纹理坐标（可选）
+	NormalArr faceNormals; // 对于每个面，它的法线（可选）
+	TexCoordArr faceTexcoords; //  对于每个面，对应于所包含顶点的纹理坐标（可选）
 
-	Image8U3 textureDiffuse; // texture containing the diffuse color (optional) 包含漫射颜色的纹理（可选）
+	Image8U3 textureDiffuse; //  包含漫射颜色的纹理（可选）
 
 	#ifdef _USE_CUDA
 	static CUDA::KernelRT kernelComputeFaceNormal;
@@ -181,7 +180,7 @@ protected:
 /*----------------------------------------------------------------*/
 
 
-// used to render a mesh
+// 用于绘制网格
 template <typename DERIVED>
 struct TRasterMesh {
 	const Mesh::VertexArr& vertices;
@@ -234,6 +233,7 @@ struct TRasterMesh {
 		if (!static_cast<DERIVED*>(this)->CheckNormal(faceCenter))
 			return;
 		// 绘制三角形，并为每个像素计算光线与平面相交时的深度
+		// 对给定的三角形进行光栅化处理，输出三角形中每个像素的位置；
 		Image8U3::RasterizeTriangle(pti[0], pti[1], pti[2], *this);
 	}
 

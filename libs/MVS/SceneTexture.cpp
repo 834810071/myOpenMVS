@@ -154,7 +154,7 @@ struct MeshTexture {
 		VIndex idxView;// the view seeing this face
 		float quality; // how well the face is seen by this view
 		#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
-		Color color; // additionally store mean color (used to remove outliers)
+		Color color; // 另外存储平均颜色（用于移除异常值）
 		#endif
 	};
 	typedef cList<FaceData,const FaceData&,0,8,uint32_t> FaceDataArr; // store information about one face seen from several views
@@ -412,7 +412,7 @@ public:
 	Mesh::TexCoordArr& faceTexcoords; // for each face, the texture-coordinates of the vertices
 	Image8U3& textureDiffuse; // texture containing the diffuse color
 
-	// constant the entire time
+	// 在整个时间内保持不变
 	Mesh::VertexArr& vertices;
 	Mesh::FaceArr& faces;
 	ImageArr& images;
@@ -444,11 +444,14 @@ MeshTexture::~MeshTexture()
 void MeshTexture::ListVertexFaces()
 {
 	scene.mesh.EmptyExtra();	// 清空
+	// scene.mesh.vertexFaces[face[v]].Insert(i);   包含该顶点的面列表  scene.mesh.vertexFaces[顶点].Insert(面的索引)
 	scene.mesh.ListIncidenteFaces();	// 提取与每个顶点关联的三角形数组
+	// 当顶点所在的三角形中仅有两个顶点说明该三角形是一条边  属于边界  scene.mesh.vertexBoundary (bool)
 	scene.mesh.ListBoundaryVertices();	// 检查每个顶点是否在边界上（确保在前面调用了listIncidenteFaces（））
 }
 
-// 提取每个图像看到的面数组
+// 提取每个图像看到的面数组                    对faceDatas进行赋值                  6e-2f
+// 对应对应论文 数据项计算 + 图像一致性检查
 bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThreshold)
 {
 	// 创建顶点八叉树
@@ -457,18 +460,22 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 	struct FacesInserter {
 		FacesInserter(const Mesh::VertexFacesArr& _vertexFaces, CameraFaces& _cameraFaces)
 			: vertexFaces(_vertexFaces), cameraFaces(_cameraFaces) {}
-		inline void operator() (IDX idxVertex) {
+
+        inline void operator() (IDX idxVertex) {
 			const Mesh::FaceIdxArr& vertexTris = vertexFaces[idxVertex];
 			FOREACHPTR(pTri, vertexTris)
 				cameraFaces.emplace(*pTri);
 		}
+
 		inline void operator() (const IDX* idices, size_t size) {
 			FOREACHRAWPTR(pIdxVertex, idices, size)
 				operator()(*pIdxVertex);
 		}
+
 		const Mesh::VertexFacesArr& vertexFaces;
 		CameraFaces& cameraFaces;
 	};
+
 	typedef TOctree<Mesh::VertexArr,float,3> Octree;
 	const Octree octree(vertices);
 	#if 0 && !defined(_RELEASE)
@@ -480,7 +487,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 	// 提取每个图像看到的面数组
 	Util::Progress progress(_T("Initialized views"), images.GetSize());
 	typedef float real;
-	TImage<real> imageGradMag;
+	TImage<real> imageGradMag;  // 梯度幅值
 	TImage<real>::EMat mGrad[2];
 	FaceMap faceMap;
 	DepthMap depthMap;
@@ -529,8 +536,8 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 
 		// 使用扩展的Sobel运算符计算第一、第二、第三或混合图像导数。  Sobel 边缘检测算子  论文第6页
 		#if 1
-		cv::Sobel(imageGradMag, grad[0], cv::DataType<real>::type, 1, 0, 3, 1.0/8.0);	// Sobel 边缘检测算子
-		cv::Sobel(imageGradMag, grad[1], cv::DataType<real>::type, 0, 1, 3, 1.0/8.0);
+		cv::Sobel(imageGradMag, grad[0], cv::DataType<real>::type, 1, 0, 3, 1.0/8.0);	// Sobel 边缘检测算子 x方向梯度
+		cv::Sobel(imageGradMag, grad[1], cv::DataType<real>::type, 0, 1, 3, 1.0/8.0);   // y方向梯度
 		#elif 1
 		const TMatrix<real,3,5> kernel(CreateDerivativeKernel3x5());
 		cv::filter2D(imageGradMag, grad[0], cv::DataType<real>::type, kernel);
@@ -541,12 +548,13 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 		cv::filter2D(imageGradMag, grad[1], cv::DataType<real>::type, kernel.t());
         #endif
 		// (mGrad[0]**2 + mGrad[1]**2).sqrt()
+		// (x方向梯度的幂 + y方向梯度的幂)开根号
 		(TImage<real>::EMatMap)imageGradMag = (mGrad[0].cwiseAbs2()+mGrad[1].cwiseAbs2()).cwiseSqrt();	// 矩阵和向量的系数方向运算符
 
 		// 选择视图截头体内的面
 		CameraFaces cameraFaces;
 		FacesInserter inserter(vertexFaces, cameraFaces);
-		typedef TFrustum<float,5> Frustum;  //（表示为朝向截头体外部的6个平面）
+		typedef TFrustum<float,5> Frustum;  //（表示为朝向截头体外部的6个平面） 相机参数
 		// 投影矩阵 + 图片 宽 + 图片 高
 		const Frustum frustum(Frustum::MATRIX3x4(((PMatrix::CEMatMap)imageData.camera.P).cast<float>()), (float)imageData.width, (float)imageData.height);
 		// 遍历树并收集可见索引
@@ -555,23 +563,25 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 		// 投影此视图中的所有三角形并保持最近的三角形
 		faceMap.create(imageData.height, imageData.width);
 		depthMap.create(imageData.height, imageData.width);
-		RasterMesh rasterer(vertices, imageData.camera, depthMap, faceMap); // 光栅网格
+		RasterMesh rasterer(vertices, imageData.camera, depthMap, faceMap); // 光栅网格  点阵数据结构 位图  矩形像素网格
 		rasterer.Clear();
 		for (auto idxFace : cameraFaces) {
 			const Face& facet = faces[idxFace];
 			rasterer.idxFace = idxFace;
-			rasterer.Project(facet);	// 绘制三角形
+			rasterer.Project(facet);	// 绘制三角形 投影面顶点到图像平面
 		}
 
 		// 计算可见面的投影面积
 		#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
-		CLISTDEF0IDX(uint32_t,FIndex) areas(faces.GetSize());	// 像素数量
+		CLISTDEF0IDX(uint32_t,FIndex) areas(faces.GetSize());	// 像素数量  投影区域面积
 		areas.Memset(0);
 		#endif
 		#ifdef TEXOPT_USE_OPENMP
 		#pragma omp critical
 		#endif
 		{
+		// 遍历像素点
+		// 计算平均颜色 梯度求和  确定faceData对应的视图索引
 		for (int j=0; j<faceMap.rows; ++j) {
 			for (int i=0; i<faceMap.cols; ++i) {
 				const FIndex& idxFace = faceMap(j,i);
@@ -598,19 +608,20 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 					ASSERT(!faceDatas.IsEmpty());
 					FaceData& faceData = faceDatas.Last();
 					ASSERT(faceData.idxView == idxView);
-					faceData.quality += imageGradMag(j,i);	// 梯度幅度
+					faceData.quality += imageGradMag(j,i);	// 梯度幅度求和
 					#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
-					faceData.color += Color(imageData.image(j,i));
+					faceData.color += Color(imageData.image(j,i));  // 另外存储平均颜色（用于移除异常值）
 					#endif
 				}
 			}
 		}
-		#if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
+
+        #if TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
 		FOREACH(idxFace, areas) {
 			const uint32_t& area = areas[idxFace];
 			if (area > 0) {
 				Color& color = facesDatas[idxFace].Last().color;
-				color = RGB2YCBCR(Color(color * (1.f/(float)area)));
+				color = RGB2YCBCR(Color(color * (1.f/(float)area)));    // 求取均值
 			}
 		}
 		#endif
@@ -627,7 +638,7 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 	if (fOutlierThreshold > 0) {
 		// 尝试检测每个面的异常视图（被场景中的动态对象遮挡的视图，例如行人）
 		FOREACHPTR(pFaceDatas, facesDatas)
-			FaceOutlierDetection(*pFaceDatas, fOutlierThreshold);
+			FaceOutlierDetection(*pFaceDatas, fOutlierThreshold);   // 图像一致性检查
 	}
 	#endif
 	return true;
@@ -692,22 +703,23 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 
 #elif TEXOPT_FACEOUTLIER != TEXOPT_FACEOUTLIER_NA
 
-// A multi-variate normal distribution which is NOT normalized such that the integral is 1
-// - centered is the vector for which the function is to be evaluated with the mean subtracted [Nx1]
-// - X is the vector for which the function is to be evaluated [Nx1]
-// - mu is the mean around which the distribution is centered [Nx1]
-// - covarianceInv is the inverse of the covariance matrix [NxN]
+// 一种多元正态分布，它不是正态分布，积分为1。
+// -居中是要使用平均值减去[NX1]来计算函数的向量
+// -X是要为其计算函数的向量[NX1]
+// -mu是分布以其为中心的平均值[NX1]
+// -协方差INV是协方差矩阵[NXN]的逆
 // return exp(-1/2 * (X-mu)^T * covariance_inv * (X-mu))
 template <typename T, int N>
 inline T MultiGaussUnnormalized(const Eigen::Matrix<T,N,1>& centered, const Eigen::Matrix<T,N,N>& covarianceInv) {
-	return EXP(T(-0.5) * T(centered.adjoint() * covarianceInv * centered));
+    //                  转置矩阵
+    return EXP(T(-0.5) * T(centered.adjoint() * covarianceInv * centered)); // 论文 第7页  图像一致性检查
 }
 template <typename T, int N>
 inline T MultiGaussUnnormalized(const Eigen::Matrix<T,N,1>& X, const Eigen::Matrix<T,N,1>& mu, const Eigen::Matrix<T,N,N>& covarianceInv) {
 	return MultiGaussUnnormalized<T,N>(X - mu, covarianceInv);
 }
 
-// 降低/删除face投影颜色与大多数视图不同的所有视图的质量
+// 降低/删除face投影颜色与大多数视图不同的所有视图的质量  图像一致性检查
 bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) const
 {
 	// 拒绝所有高斯值低于此阈值的视图
@@ -716,12 +728,13 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 
 	const float minCovariance(1e-3f); // 如果所有协方差都低于此值，则异常值检测将中止
 
-	const unsigned maxIterations(10);
-	const unsigned minInliers(4);
+	const unsigned maxIterations(10);   // 最多迭代次数
+	const unsigned minInliers(4);   // 内点数小于4
 
 	// 初始化颜色(color)数组
 	if (faceDatas.GetSize() <= minInliers)
 		return false;
+
 	Eigen::Matrix3Xd colorsAll(3, faceDatas.GetSize());
 	BoolArr inliers(faceDatas.GetSize());
 	FOREACH(i, faceDatas) {
@@ -729,7 +742,7 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 		inliers[i] = true;
 	}
 
-	// 执行异常值删除； 如果出现错误（低于阈值的inlier数或无法反转协方差），则中止
+	// 执行异常值删除； 如果出现错误（低于阈值的inlier数或无法转换为协方差矩阵），则中止
 	size_t numInliers(faceDatas.GetSize());
 	Eigen::Vector3d mean;
 	Eigen::Matrix3d covariance;
@@ -737,9 +750,11 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 	for (unsigned iter = 0; iter < maxIterations; ++iter) {
 		// 仅计算内嵌项(inlier)的平均颜色和颜色协方差
 		const Eigen::Block<Eigen::Matrix3Xd,3,Eigen::Dynamic,!Eigen::Matrix3Xd::IsRowMajor> colors(colorsAll.leftCols(numInliers));
-		mean = colors.rowwise().mean();
+		mean = colors.rowwise().mean(); // 颜色均值  第一步
+
+		// 协方差(i,j)=（第i列的所有元素-第i列的均值）*（第j列的所有元素-第j列的均值）
 		const Eigen::Matrix3Xd centered(colors.colwise() - mean);
-		covariance = (centered * centered.transpose()) / double(colors.cols() - 1);
+		covariance = (centered * centered.transpose()) / double(colors.cols() - 1); // 计算协方差  减去均值 除以数量
 
 		// 如果所有协方差变得非常小，则停止
 		if (covariance.array().abs().maxCoeff() < minCovariance) {
@@ -750,18 +765,27 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 			return true;
 		}
 
-		// 反演协方差矩阵 （FullPivLU不是最快的，但在反演期间给出数值稳定性的反馈）
-		const Eigen::FullPivLU<Eigen::Matrix3d> lu(covariance);
+		// 协方差矩阵倒数 （FullPivLU不是最快的，但在倒数期间给出数值稳定性的反馈）
+		// 将一个矩阵分解为一个单位下三角矩阵和一个上三角矩阵的乘积
+		const Eigen::FullPivLU<Eigen::Matrix3d> lu(covariance); // LU分解的矩阵具有完全旋转性，以及相关的特征。
+
+		// 如果矩阵*的LU分解是可逆的，则为true。
 		if (!lu.isInvertible())
 			return false;
 		covarianceInv = lu.inverse();
+//        cout << covariance << endl;
+//        cout << lu << endl;
+//        cout << covarianceInv << endl;
 
-		// 筛选内层（高斯值高于阈值的所有视图）
+        // 筛选内层（高斯值高于阈值的所有视图）
 		numInliers = 0;
 		bool bChanged(false);
 		FOREACH(i, faceDatas) {
 			const Eigen::Vector3d color(((const Color::EVec)faceDatas[i].color).cast<double>());
-			const double gaussValue(MultiGaussUnnormalized<double,3>(color, mean, covarianceInv));
+			// color -> 内点 mean -> all
+			const double gaussValue(MultiGaussUnnormalized<double,3>(color, mean, covarianceInv));  // 求取高斯值
+
+			// 阀值比较
 			bool& inlier = inliers[i];
 			if (gaussValue > thOutlier) {
 				// 设置为inlier
@@ -806,10 +830,10 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 	return true;
 }
 #endif
-
+//     视图选择                     6e-2f                0.1
 bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmoothness)
 {
-	// 提取与每个顶点关联的三角形数组
+	// 提取与每个顶点关联的三角形数组 并判断该顶点是否在边缘处
 	ListVertexFaces();
 
 	// 创建纹理贴图
@@ -817,24 +841,28 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 		// 列出每个面对应的所有视图
 		FaceDataViewArr facesDatas;
 		// 提取每个图像看到的面数组
+		// 数据项 + 图像一致性检查
 		if (!ListCameraFaces(facesDatas, fOutlierThreshold))	// fOutlierThreshold default(6e-2f)  对facesDatas进行赋值
 			return false;
 
-		// 创建面  图
+		// 创建面  图  图割
 		typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS> Graph;
 		typedef boost::graph_traits<Graph>::edge_iterator EdgeIter;
 		typedef boost::graph_traits<Graph>::out_edge_iterator EdgeOutIter;
 		Graph graph;
 		{
+		    // 图中添加顶点  face作为顶点
 			FOREACH(idxFace, faces) {
 				const Mesh::FIndex idx((Mesh::FIndex)boost::add_vertex(graph));
-				ASSERT(idx == idxFace); // 保证每个顶点都被添加到图中
+				ASSERT(idx == idxFace); // 都被添加到图中
 			}
 
 			Mesh::FaceIdxArr afaces;
+			// 缝隙作为边
 			FOREACH(idxFace, faces) {
+			    // 当前面的三个顶点所在的面，如果有重复的则放入afaces
 				scene.mesh.GetFaceFaces(idxFace, afaces);
-				ASSERT(ISINSIDE((int)afaces.GetSize(), 1, 4));	// 1<=size < 4
+				ASSERT(ISINSIDE((int)afaces.GetSize(), 1, 4));	// 1 <=size < 4
 
 				FOREACHPTR(pIdxFace, afaces) {
 					const FIndex idxFaceAdj = *pIdxFace;
@@ -852,10 +880,10 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 				afaces.Empty();
 			}
 
-			ASSERT((Mesh::FIndex)boost::num_vertices(graph) == faces.GetSize());	// 顶点数等于面数
+			ASSERT((Mesh::FIndex)boost::num_vertices(graph) == faces.GetSize());	// 图中顶点数等于面数
 		}
 
-		// 给每个面分配最佳视图
+		// 给每个面分配最佳视图  todo
 		LabelArr labels(faces.GetSize());
 		components.Resize(faces.GetSize());
 		{
@@ -1123,18 +1151,21 @@ void MeshTexture::CreateSeamVertices()
 	uint32_t vs0[2], vs1[2];
 	std::unordered_map<VIndex, uint32_t> mapVertexSeam;
 	const unsigned numPatches(texturePatches.GetSize()-1);
+
 	FOREACHPTR(pEdge, seamEdges) {
 		// 存储边缘，用于以后的接缝优化
 		ASSERT(pEdge->i < pEdge->j);
-		const uint32_t idxPatch0(mapIdxPatch[components[pEdge->i]]);
-		const uint32_t idxPatch1(mapIdxPatch[components[pEdge->j]]);
+		const uint32_t idxPatch0(mapIdxPatch[components[pEdge->i]]);	// 某个联通分量的x方向对应的块
+		const uint32_t idxPatch1(mapIdxPatch[components[pEdge->j]]);	// 某个联通分量的y方向对应的块
 		ASSERT(idxPatch0 != idxPatch1 || idxPatch0 == numPatches);
 		if (idxPatch0 == idxPatch1)
 			continue;
+
 		seamVertices.ReserveExtra(2);
-		scene.mesh.GetEdgeVertices(pEdge->i, pEdge->j, vs0, vs1);
+		scene.mesh.GetEdgeVertices(pEdge->i, pEdge->j, vs0, vs1);	// 获取边顶点
 		ASSERT(faces[pEdge->i][vs0[0]] == faces[pEdge->j][vs1[0]]);
 		ASSERT(faces[pEdge->i][vs0[1]] == faces[pEdge->j][vs1[1]]);
+
 		vs[0] = faces[pEdge->i][vs0[0]];
 		vs[1] = faces[pEdge->i][vs0[1]];
 
@@ -1149,23 +1180,27 @@ void MeshTexture::CreateSeamVertices()
 		SeamVertex& seamVertex1 = seamVertices[itSeamVertex1.first->second];
 
 		if (idxPatch0 < numPatches) {
-			const TexCoord offset0(texturePatches[idxPatch0].rect.tl());
+			const TexCoord offset0(texturePatches[idxPatch0].rect.tl());	// top left
 			SeamVertex::Patch& patch00 = seamVertex0.GetPatch(idxPatch0);
 			SeamVertex::Patch& patch10 = seamVertex1.GetPatch(idxPatch0);
+
 			ASSERT(patch00.edges.Find(itSeamVertex1.first->second) == NO_ID);
 			patch00.edges.AddConstruct(itSeamVertex1.first->second).idxFace = pEdge->i;
 			patch00.proj = faceTexcoords[pEdge->i*3+vs0[0]]+offset0;
+
 			ASSERT(patch10.edges.Find(itSeamVertex0.first->second) == NO_ID);
 			patch10.edges.AddConstruct(itSeamVertex0.first->second).idxFace = pEdge->i;
 			patch10.proj = faceTexcoords[pEdge->i*3+vs0[1]]+offset0;
 		}
 		if (idxPatch1 < numPatches) {
-			const TexCoord offset1(texturePatches[idxPatch1].rect.tl());
+			const TexCoord offset1(texturePatches[idxPatch1].rect.tl());	// top left
 			SeamVertex::Patch& patch01 = seamVertex0.GetPatch(idxPatch1);
 			SeamVertex::Patch& patch11 = seamVertex1.GetPatch(idxPatch1);
+
 			ASSERT(patch01.edges.Find(itSeamVertex1.first->second) == NO_ID);
 			patch01.edges.AddConstruct(itSeamVertex1.first->second).idxFace = pEdge->j;
 			patch01.proj = faceTexcoords[pEdge->j*3+vs1[0]]+offset1;
+
 			ASSERT(patch11.edges.Find(itSeamVertex0.first->second) == NO_ID);
 			patch11.edges.AddConstruct(itSeamVertex0.first->second).idxFace = pEdge->j;
 			patch11.proj = faceTexcoords[pEdge->j*3+vs1[1]]+offset1;
@@ -1174,72 +1209,85 @@ void MeshTexture::CreateSeamVertices()
 	seamEdges.Release();
 }
 
+// 论文 颜色查找区域  todo
 void MeshTexture::GlobalSeamLeveling()
 {
 	ASSERT(!seamVertices.IsEmpty());
 	const unsigned numPatches(texturePatches.GetSize()-1);
 
-	// find the patch ID for each vertex
+	// 查找每个顶点的补丁块ID
 	PatchIndices patchIndices(vertices.GetSize());
 	patchIndices.Memset(0);
 	FOREACH(f, faces) {
-		const uint32_t idxPatch(mapIdxPatch[components[f]]);
+		const uint32_t idxPatch(mapIdxPatch[components[f]]); // 面联通部分对应的块id
 		const Face& face = faces[f];
 		for (int v=0; v<3; ++v)
-			patchIndices[face[v]].idxPatch = idxPatch;
+			patchIndices[face[v]].idxPatch = idxPatch;	// 该面的3个顶点赋值
 	}
+	// 标记缝隙顶点
 	FOREACH(i, seamVertices) {
 		const SeamVertex& seamVertex = seamVertices[i];
 		ASSERT(!seamVertex.patches.IsEmpty());
+
 		PatchIndex& patchIndex = patchIndices[seamVertex.idxVertex];
 		patchIndex.bIndex = true;
 		patchIndex.idxSeamVertex = i;
 	}
 
-	// assign a row index within the solution vector x to each vertex/patch
+	// 将解向量X内的行索引分配给每个顶点/贴片
 	ASSERT(vertices.GetSize() < static_cast<VIndex>(std::numeric_limits<MatIdx>::max()));
 	MatIdx rowsX(0);
 	typedef std::unordered_map<uint32_t,MatIdx> VertexPatch2RowMap;
 	cList<VertexPatch2RowMap> vertpatch2rows(vertices.GetSize());
+
 	FOREACH(i, vertices) {
-		const PatchIndex& patchIndex = patchIndices[i];
+		const PatchIndex& patchIndex = patchIndices[i];	// 顶点对应的块
 		VertexPatch2RowMap& vertpatch2row = vertpatch2rows[i];
-		if (patchIndex.bIndex) {
-			// vertex is part of multiple patches
+
+		if (patchIndex.bIndex) {	// 缝隙
+			// 顶点是多个布丁块的一部分  缝隙
 			const SeamVertex& seamVertex = seamVertices[patchIndex.idxSeamVertex];
 			ASSERT(seamVertex.idxVertex == i);
+
 			FOREACHPTR(pPatch, seamVertex.patches) {
 				ASSERT(pPatch->idxPatch != numPatches);
+
 				vertpatch2row[pPatch->idxPatch] = rowsX++;
 			}
 		} else
 		if (patchIndex.idxPatch < numPatches) {
-			// vertex is part of only one patch
+			// 顶点是1个布丁块的一部分
 			vertpatch2row[patchIndex.idxPatch] = rowsX++;
 		}
 	}
 
-	// fill Tikhonov's Gamma matrix (regularization constraints)
+	// 填充Tikhonov Gamma矩阵（正则化约束）
 	const float lambda(0.1f);
-	MatIdx rowsGamma(0);
+	MatIdx rowsGamma(0);	// 矩阵元素为 +/- 0.1
 	Mesh::VertexIdxArr adjVerts;
 	CLISTDEF0(MatEntry) rows(0, vertices.GetSize()*4);
+
 	FOREACH(v, vertices) {
 		adjVerts.Empty();
-		scene.mesh.GetAdjVertices(v, adjVerts);
+		scene.mesh.GetAdjVertices(v, adjVerts);	// 获取顶点v的相邻顶点
+
 		VertexPatchIterator itV(patchIndices[v], seamVertices);
 		while (itV.Next()) {
 			const uint32_t idxPatch(itV);
 			if (idxPatch == numPatches)
 				continue;
+
 			const MatIdx col(vertpatch2rows[v].at(idxPatch));
 			FOREACHPTR(pAdjVert, adjVerts) {
 				const VIndex vAdj(*pAdjVert);
+
 				if (v >= vAdj)
 					continue;
+
 				VertexPatchIterator itVAdj(patchIndices[vAdj], seamVertices);
 				while (itVAdj.Next()) {
 					const uint32_t idxPatchAdj(itVAdj);
+
 					if (idxPatch == idxPatchAdj) {
 						const MatIdx colAdj(vertpatch2rows[vAdj].at(idxPatchAdj));
 						rows.AddConstruct(rowsGamma, col, lambda);
@@ -1250,25 +1298,30 @@ void MeshTexture::GlobalSeamLeveling()
 			}
 		}
 	}
-	ASSERT(rows.GetSize()/2 < static_cast<IDX>(std::numeric_limits<MatIdx>::max()));
+	ASSERT(rows.GetSize()/2 < static_casInitializedt<IDX>(std::numeric_limits<MatIdx>::max()));
+	cout << rowsGamma << endl;
 
-	SparseMat Gamma(rowsGamma, rowsX);
+	SparseMat Gamma(rowsGamma, rowsX);	// 稀疏矩阵  Gamma  稀疏矩阵 元素为 +/- 1
 	Gamma.setFromTriplets(rows.Begin(), rows.End());
 	rows.Empty();
 
-	// fill the matrix A and the coefficients for the Vector b of the linear equation system
+	// 填充线性方程组的矩阵A和向量B的系数
 	IndexArr indices;
 	Colors vertexColors;
 	Colors coeffB;
+
 	FOREACHPTR(pSeamVertex, seamVertices) {
 		const SeamVertex& seamVertex = *pSeamVertex;
 		if (seamVertex.patches.GetSize() < 2)
 			continue;
-		seamVertex.SortByPatchIndex(indices);
+
+		seamVertex.SortByPatchIndex(indices);	// sort
 		vertexColors.Resize(indices.GetSize());
-		FOREACH(i, indices) {
+
+		FOREACH(i, indices) {	// 按照所以遍历
 			const SeamVertex::Patch& patch0 = seamVertex.patches[indices[i]];
 			ASSERT(patch0.idxPatch < numPatches);
+
 			SampleImage sampler(images[texturePatches[patch0.idxPatch].label].image);
 			FOREACHPTR(pEdge, patch0.edges) {
 				const SeamVertex& seamVertex1 = seamVertices[pEdge->idxSeamVertex];
@@ -1279,19 +1332,23 @@ void MeshTexture::GlobalSeamLeveling()
 			}
 			vertexColors[i] = sampler.GetColor();
 		}
+
 		const VertexPatch2RowMap& vertpatch2row = vertpatch2rows[seamVertex.idxVertex];
 		for (IDX i=0; i<indices.GetSize()-1; ++i) {
 			const uint32_t idxPatch0(seamVertex.patches[indices[i]].idxPatch);
 			const Color& color0 = vertexColors[i];
 			const MatIdx col0(vertpatch2row.at(idxPatch0));
+
 			for (IDX j=i+1; j<indices.GetSize(); ++j) {
 				const uint32_t idxPatch1(seamVertex.patches[indices[j]].idxPatch);
 				const Color& color1 = vertexColors[j];
 				const MatIdx col1(vertpatch2row.at(idxPatch1));
 				ASSERT(idxPatch0 < idxPatch1);
+
 				const MatIdx rowA((MatIdx)coeffB.GetSize());
 				coeffB.Insert(color1 - color0);
 				ASSERT(ISFINITE(coeffB.Last()));
+
 				rows.AddConstruct(rowA, col0,  1.f);
 				rows.AddConstruct(rowA, col1, -1.f);
 			}
@@ -1300,43 +1357,45 @@ void MeshTexture::GlobalSeamLeveling()
 	ASSERT(coeffB.GetSize() < static_cast<IDX>(std::numeric_limits<MatIdx>::max()));
 
 	const MatIdx rowsA((MatIdx)coeffB.GetSize());
-	SparseMat A(rowsA, rowsX);
+	SparseMat A(rowsA, rowsX);	//  A  稀疏矩阵 元素为 +/- 1
 	A.setFromTriplets(rows.Begin(), rows.End());
 	rows.Release();
 
-	SparseMat Lhs(A.transpose() * A + Gamma.transpose() * Gamma);
-	// CG uses only the lower triangle, so prune the rest and compress matrix
+	SparseMat Lhs(A.transpose() * A + Gamma.transpose() * Gamma);	// 公式3  (A^T*A + Γ^T*Γ)	左边向量
+	// CG只使用下三角形，所以剪枝其余部分并压缩矩阵
 	Lhs.prune([](const int& row, const int& col, const float&) -> bool {
 		return col <= row;
 	});
 
-	// globally solve for the correction colors
+	// 全局求解校正颜色
 	Eigen::Matrix<float,Eigen::Dynamic,3,Eigen::RowMajor> colorAdjustments(rowsX, 3);
 	{
-		// init CG solver
+		// 初始化 CG solver
 		Eigen::ConjugateGradient<SparseMat, Eigen::Lower> solver;
 		solver.setMaxIterations(1000);
+		// 公差对应于相对残余误差:  |Ax-b|/|b|
 		solver.setTolerance(0.0001f);
 		solver.compute(Lhs);
 		ASSERT(solver.info() == Eigen::Success);
+
 		#ifdef TEXOPT_USE_OPENMP
 		#pragma omp parallel for
 		#endif
 		for (int channel=0; channel<3; ++channel) {
-			// init right hand side vector
+			//初始化右边向量
 			const Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::Stride<0,3> > b(coeffB.Begin()->ptr()+channel, rowsA);
-			const Eigen::VectorXf Rhs(SparseMat(A.transpose()) * b);
-			// solve for x
+			const Eigen::VectorXf Rhs(SparseMat(A.transpose()) * b);	//
+			// 求解 x
 			const Eigen::VectorXf x(solver.solve(Rhs));
 			ASSERT(solver.info() == Eigen::Success);
-			// subtract mean since the system is under-constrained and
-			// we need the solution with minimal adjustments
+			// 减去均值，因为系统是欠约束的，我们需要最小调整量的解
 			Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::Stride<0,3> >(colorAdjustments.data()+channel, rowsX) = x.array() - x.mean();
+
 			DEBUG_LEVEL(3, "\tcolor channel %d: %d iterations, %g residual", channel, solver.iterations(), solver.error());
 		}
 	}
 
-	// adjust texture patches using the correction colors
+	// 使用校正颜色调整纹理贴图
 	#ifdef TEXOPT_USE_OPENMP
 	#pragma omp parallel for schedule(dynamic)
 	for (int i=0; i<(int)numPatches; ++i) {
@@ -1777,14 +1836,21 @@ void MeshTexture::LocalSeamLeveling()
 	}
 }
 
+// 基于全局接缝平整的均匀纹理贴图生成方法  bGlobalSeamLeveling true
+// 基于局部接缝平整的均匀纹理贴图边界生成方法 bLocalSeamLeveling true
+// 纹理大小应为该值的倍数（0 - 2的倍数）  nTextureSizeMultiple 0
+// 指定在决定将新修补程序放置在何处时使用的启发式方法（0-最佳匹配，3-良好速度，100-最佳速度）  nRectPackingHeuristic 3
+// 用于未被任何图像覆盖的面部的颜色 colEmpty 0x00FF7F27 r 255 g 127 b 39
 void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLeveling, unsigned nTextureSizeMultiple, unsigned nRectPackingHeuristic, Pixel8U colEmpty)
 {
 	// 在相应视图中投射补丁并计算纹理坐标和边界框
 	const int border(2);
-	faceTexcoords.Resize(faces.GetSize()*3);    // 面纹理坐标
+	faceTexcoords.Resize(faces.GetSize()*3);    // 面纹理坐标	 每个面有3个顶点
+
 	#ifdef TEXOPT_USE_OPENMP
 	const unsigned numPatches(texturePatches.GetSize()-1);
 	#pragma omp parallel for schedule(dynamic)
+	// 遍历纹理块
 	for (int_t idx=0; idx<(int_t)numPatches; ++idx) {
 		TexturePatch& texturePatch = texturePatches[(uint32_t)idx];
 	#else
@@ -1794,26 +1860,32 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		const Image& imageData = images[texturePatch.label];
 		//投射顶点与计算边界框
 		AABB2f aabb(true);	// 边界框类
+		// 对于纹理块的所有面 利用投影矩阵 将每个面的3个顶点投影到图像坐标中
 		FOREACHPTR(pIdxFace, texturePatch.faces) {
 			const FIndex idxFace(*pIdxFace);
 			const Face& face = faces[idxFace];
 			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
+
 			for (int i=0; i<3; ++i) {
 				texcoords[i] = imageData.camera.ProjectPointP(vertices[face[i]]);
 				ASSERT(imageData.image.isInsideWithBorder(texcoords[i], border));
 				aabb.InsertFull(texcoords[i]);
 			}
 		}
+
 		// 计算相对纹理坐标
 		ASSERT(imageData.image.isInside(Point2f(aabb.ptMin)));
 		ASSERT(imageData.image.isInside(Point2f(aabb.ptMax)));
+
 		texturePatch.rect.x = FLOOR2INT(aabb.ptMin[0])-border;
 		texturePatch.rect.y = FLOOR2INT(aabb.ptMin[1])-border;
+
 		texturePatch.rect.width = CEIL2INT(aabb.ptMax[0]-aabb.ptMin[0])+border*2;
 		texturePatch.rect.height = CEIL2INT(aabb.ptMax[1]-aabb.ptMin[1])+border*2;
 		ASSERT(imageData.image.isInside(texturePatch.rect.tl()));
 		ASSERT(imageData.image.isInside(texturePatch.rect.br()));
-		const TexCoord offset(texturePatch.rect.tl());
+
+		const TexCoord offset(texturePatch.rect.tl());	// ???
 		FOREACHPTR(pIdxFace, texturePatch.faces) {
 			const FIndex idxFace(*pIdxFace);
 			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
@@ -1822,7 +1894,7 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		}
 	}
 	{
-		// init最后一个补丁指向一个小的统一颜色补丁
+		// 初始化最后一个补丁指向一个小的统一颜色补丁
 		TexturePatch& texturePatch = texturePatches.Last();
 		const int sizePatch(border*2+1);
 		texturePatch.rect = cv::Rect(0,0, sizePatch,sizePatch);
@@ -1836,7 +1908,7 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 
 	// 进行接缝调平
 	if (texturePatches.GetSize() > 2 && (bGlobalSeamLeveling || bLocalSeamLeveling)) {
-		// 创建接缝顶点和边
+		// 创建接缝顶点和边  todo
 		CreateSeamVertices();
 
 		// 执行全局接缝调平
@@ -1969,6 +2041,8 @@ bool Scene::TextureMesh(unsigned nResolutionLevel, unsigned nMinResolution, floa
 	// 为每个面分配最佳视图
 	{
 		TD_TIMER_STARTD();
+		// 用于查找和删除离群值面部纹理的阈值（0-已禁用）-fOutlierThreshold(6e-2f)
+		// 用于调整更紧凑贴片偏好的比率（1-最佳质量/最差紧凑性，~0-最差质量/最佳紧凑性） - fRatioDataSmoothness(0.1f)
 		if (!texture.FaceViewSelection(fOutlierThreshold, fRatioDataSmoothness))
 			return false;
 		DEBUG_EXTRA("Assigning the best view to each face completed: %u faces (%s)", mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
@@ -1977,6 +2051,11 @@ bool Scene::TextureMesh(unsigned nResolutionLevel, unsigned nMinResolution, floa
 	// 生成纹理图像和地图集
 	{
 		TD_TIMER_STARTD();
+		// 基于全局接缝平整的均匀纹理贴图生成方法  bGlobalSeamLeveling true
+		// 基于局部接缝平整的均匀纹理贴图边界生成方法 bLocalSeamLeveling true
+		// 纹理大小应为该值的倍数（0 - 2的倍数）  nTextureSizeMultiple 0
+		// 指定在决定将新修补程序放置在何处时使用的启发式方法（0-最佳匹配，3-良好速度，100-最佳速度）  nRectPackingHeuristic 3
+		// 用于未被任何图像覆盖的面部的颜色 colEmpty 0x00FF7F27 r 255 g 127 b 39
 		texture.GenerateTexture(bGlobalSeamLeveling, bLocalSeamLeveling, nTextureSizeMultiple, nRectPackingHeuristic, colEmpty);
 		DEBUG_EXTRA("Generating texture atlas and image completed: %u patches, %u image size (%s)", texture.texturePatches.GetSize(), mesh.textureDiffuse.width(), TD_TIMER_GET_FMT().c_str());
 	}

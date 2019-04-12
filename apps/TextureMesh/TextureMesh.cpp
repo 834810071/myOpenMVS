@@ -179,31 +179,32 @@ int main(int argc, LPCTSTR* argv)
 		return EXIT_FAILURE;
 
 	Scene scene(OPT::nMaxThreads);
-	// load and texture the mesh
+	// 加载并纹理化网格
 	if (!scene.Load(MAKE_PATH_SAFE(OPT::strInputFileName)))
 		return EXIT_FAILURE;
 	if (!OPT::strMeshFileName.IsEmpty()) {
-		// load given mesh
+		// 加载给定的网格
 		scene.mesh.Load(MAKE_PATH_SAFE(OPT::strMeshFileName));
 	}
 	if (scene.mesh.IsEmpty()) {
 		VERBOSE("error: empty initial mesh");
 		return EXIT_FAILURE;
 	}
+
 	const String baseFileName(MAKE_PATH_SAFE(Util::getFileFullName(OPT::strOutputFileName)));
 	if (OPT::nOrthoMapResolution && !scene.mesh.textureDiffuse.empty()) {
-		// the input mesh is already textured and an orthographic projection was requested
+		// 输入网格已进行纹理处理，并请求了正交投影
 		goto ProjectOrtho;
 	}
 
 	{
-	// compute mesh texture
+	// 计算网格纹理
 	TD_TIMER_START();
 	if (!scene.TextureMesh(OPT::nResolutionLevel, OPT::nMinResolution, OPT::fOutlierThreshold, OPT::fRatioDataSmoothness, OPT::bGlobalSeamLeveling, OPT::bLocalSeamLeveling, OPT::nTextureSizeMultiple, OPT::nRectPackingHeuristic, Pixel8U(OPT::nColEmpty)))
 		return EXIT_FAILURE;
 	VERBOSE("Mesh texturing completed: %u vertices, %u faces (%s)", scene.mesh.vertices.GetSize(), scene.mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
 
-	// save the final mesh
+	// 保存
 	scene.Save(baseFileName+_T(".mvs"), (ARCHIVE_TYPE)OPT::nArchiveType);
 	scene.mesh.Save(baseFileName+OPT::strExportType);
 	#if TD_VERBOSE != TD_VERBOSE_OFF
@@ -213,7 +214,7 @@ int main(int argc, LPCTSTR* argv)
 	}
 
 	if (OPT::nOrthoMapResolution) {
-		// project mesh as an orthographic image
+		// 投影网格作为正交图像
 		ProjectOrtho:
 		Image8U3 imageRGB;
 		Image8U imageRGBA[4];
