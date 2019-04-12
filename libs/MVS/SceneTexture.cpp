@@ -164,20 +164,20 @@ struct MeshTexture {
 	typedef uint32_t Label;
 	typedef cList<Label,Label,0,1024,FIndex> LabelArr;
 
-	// represents a texture patch
+	//代表一个纹理块
 	struct TexturePatch {
 		Label label; // view index
-		Mesh::FaceIdxArr faces; // indices of the faces contained by the patch
-		RectsBinPack::Rect rect; // the bounding box in the view containing the patch
+		Mesh::FaceIdxArr faces; // 贴片包含的面的索引
+		RectsBinPack::Rect rect; // 包含修补程序的视图中的边界框。
 	};
 	typedef cList<TexturePatch,const TexturePatch&,1,1024,FIndex> TexturePatchArr;
 
-	// used to optimize texture patches
+	//用于优化纹理贴片
 	struct SeamVertex {
 		struct Patch {
 			struct Edge {
-				uint32_t idxSeamVertex; // the other vertex of this edge
-				FIndex idxFace; // the face containing this edge in this patch
+				uint32_t idxSeamVertex; // 这条边的另一个顶点
+				FIndex idxFace; // 包含此贴片中此边缘的面
 
 				inline Edge() {}
 				inline Edge(uint32_t _idxSeamVertex) : idxSeamVertex(_idxSeamVertex) {}
@@ -187,9 +187,9 @@ struct MeshTexture {
 			};
 			typedef cList<Edge,const Edge&,0,4,uint32_t> Edges;
 
-			uint32_t idxPatch; // the patch containing this vertex
-			Point2f proj; // the projection of this vertex in this patch
-			Edges edges; // the edges starting from this vertex, contained in this patch (exactly two for manifold meshes)
+			uint32_t idxPatch; // 包含此顶点的贴片
+			Point2f proj; // 此顶点在此补丁中的投影
+			Edges edges; // 从这个顶点开始的边，包含在这个补丁中（对于流形网格正好是两条）
 
 			inline Patch() {}
 			inline Patch(uint32_t _idxPatch) : idxPatch(_idxPatch) {}
@@ -257,8 +257,8 @@ struct MeshTexture {
 		}
 	};
 
-	// used to sample seam edges
-	typedef TAccumulator<Color> AccumColor;
+	// 用于取样接缝边缘
+	typedef TAccumulator<Color> AccumColor;	// 对任意类型进行操作的加权累加器类
 	typedef Sampler::Linear<float> Sampler;
 	struct SampleImage {
 		AccumColor accumColor;
@@ -287,10 +287,10 @@ struct MeshTexture {
 		}
 	};
 
-	// used to interpolate adjustments color over the whole texture patch
+	// 用于在整个纹理贴片上插值调整颜色
 	typedef TImage<Color> ColorMap;
 	struct RasterPatchColorData {
-		const TexCoord* tri;
+		const TexCoord* tri;    // 纹理坐标
 		Color colors[3];
 		ColorMap& image;
 
@@ -406,18 +406,18 @@ public:
 	IndexArr mapIdxPatch; // remap texture patch indices after invalid patches removal
 	SeamVertices seamVertices; // array of vertices on the border between two or more patches
 
-	// valid the entire time
-	Mesh::VertexFacesArr& vertexFaces; // for each vertex, the list of faces containing it
-	BoolArr& vertexBoundary; // for each vertex, stores if it is at the boundary or not
-	Mesh::TexCoordArr& faceTexcoords; // for each face, the texture-coordinates of the vertices
-	Image8U3& textureDiffuse; // texture containing the diffuse color
+	//始终有效
+	Mesh::VertexFacesArr& vertexFaces; // 对于每个顶点，包含它的面的列表
+	BoolArr& vertexBoundary; //对于每个顶点，存储它是否在边界处。
+	Mesh::TexCoordArr& faceTexcoords; // 对于每个面，顶点的纹理坐标
+	Image8U3& textureDiffuse; //包含漫射颜色的纹理
 
 	// 在整个时间内保持不变
 	Mesh::VertexArr& vertices;
 	Mesh::FaceArr& faces;
 	ImageArr& images;
 
-	Scene& scene; // the mesh vertices and faces
+	Scene& scene; // 网格顶点和面
 };
 
 MeshTexture::MeshTexture(Scene& _scene, unsigned _nResolutionLevel, unsigned _nMinResolution)
@@ -1298,7 +1298,7 @@ void MeshTexture::GlobalSeamLeveling()
 			}
 		}
 	}
-	ASSERT(rows.GetSize()/2 < static_casInitializedt<IDX>(std::numeric_limits<MatIdx>::max()));
+    ASSERT(rows.GetSize()/2 < static_cast<IDX>(std::numeric_limits<MatIdx>::max()));
 	cout << rowsGamma << endl;
 
 	SparseMat Gamma(rowsGamma, rowsX);	// 稀疏矩阵  Gamma  稀疏矩阵 元素为 +/- 1
@@ -1403,30 +1403,34 @@ void MeshTexture::GlobalSeamLeveling()
 	for (unsigned i=0; i<numPatches; ++i) {
 	#endif
 		const uint32_t idxPatch((uint32_t)i);
+
 		TexturePatch& texturePatch = texturePatches[idxPatch];
 		ColorMap imageAdj(texturePatch.rect.size());
 		imageAdj.memset(0);
-		// interpolate color adjustments over the whole patch
+
+		// 在整个补丁上插值颜色调整
 		RasterPatchColorData data(imageAdj);
 		FOREACHPTR(pIdxFace, texturePatch.faces) {
 			const FIndex idxFace(*pIdxFace);
 			const Face& face = faces[idxFace];
-			data.tri = faceTexcoords.Begin()+idxFace*3;
+
+			data.tri = faceTexcoords.Begin()+idxFace*3; // 纹理坐标
 			for (int v=0; v<3; ++v)
 				data.colors[v] = colorAdjustments.row(vertpatch2rows[face[v]].at(idxPatch));
-			// render triangle and for each pixel interpolate the color adjustment
-			// from the triangle corners using barycentric coordinates
+			// 渲染三角形，并且对于每个像素，使用重心坐标从三角形角内插颜色调整
 			ColorMap::RasterizeTriangle(data.tri[0], data.tri[1], data.tri[2], data);
 		}
-		// dilate with one pixel width, in order to make sure patch border smooths out a little
+		// 以一个像素宽度扩张，以确保贴片边框稍微平滑
 		imageAdj.DilateMean<1>(imageAdj, Color::ZERO);
-		// apply color correction to the patch image
+		// 对补丁图像应用颜色校正
 		cv::Mat image(images[texturePatch.label].image(texturePatch.rect));
 		for (int r=0; r<image.rows; ++r) {
 			for (int c=0; c<image.cols; ++c) {
 				const Color& a = imageAdj(r,c);
+
 				if (a == Color::ZERO)
 					continue;
+
 				Pixel8U& v = image.at<Pixel8U>(r,c);
 				const Color col(RGB2YCBCR(Color(v)));
 				const Color acol(YCBCR2RGB(Color(col+a)));
@@ -1437,8 +1441,7 @@ void MeshTexture::GlobalSeamLeveling()
 	}
 }
 
-// set to one in order to dilate also on the diagonal of the border
-// (normally not needed)
+// 设置为1，以便在边框对角线上也扩张（通常不需要）
 #define DILATE_EXTRA 0
 void MeshTexture::ProcessMask(Image8U& mask, int stripWidth)
 {
@@ -1720,12 +1723,13 @@ void MeshTexture::PoissonBlending(const Image32F3& src, Image32F3& dst, const Im
 	}
 }
 
+// local adjustment with Poisson editing 参考论文16  “Poisson image editing.”
 void MeshTexture::LocalSeamLeveling()
 {
 	ASSERT(!seamVertices.IsEmpty());
 	const unsigned numPatches(texturePatches.GetSize()-1);
 
-	// adjust texture patches locally, so that the border continues smoothly inside the patch
+	// 局部调整纹理贴片，使边界在贴片内平滑延续
 	#ifdef TEXOPT_USE_OPENMP
 	#pragma omp parallel for schedule(dynamic)
 	for (int i=0; i<(int)numPatches; ++i) {
@@ -1734,12 +1738,13 @@ void MeshTexture::LocalSeamLeveling()
 	#endif
 		const uint32_t idxPatch((uint32_t)i);
 		TexturePatch& texturePatch = texturePatches[idxPatch];
-		// extract image
+		// 提取图像   label 视图索引
 		const Image8U3& image0(images[texturePatch.label].image);
 		Image32F3 image, imageOrg;
 		image0(texturePatch.rect).convertTo(image, CV_32FC3, 1.0/255.0);
 		image.copyTo(imageOrg);
-		// render patch coverage
+
+		// 补丁块覆盖
 		Image8U mask(texturePatch.rect.size());
 		{
 			mask.memset(0);
@@ -1750,51 +1755,61 @@ void MeshTexture::LocalSeamLeveling()
 				ColorMap::RasterizeTriangle(data.tri[0], data.tri[1], data.tri[2], data);
 			}
 		}
-		// render the patch border meeting neighbor patches
-		const TexCoord offset(texturePatch.rect.tl());
-		FOREACHPTR(pSeamVertex, seamVertices) {
+
+		// 补丁块边界 -> 邻居补丁块
+		const TexCoord offset(texturePatch.rect.tl());  // top left
+		// 遍历缝隙顶点  使用缝隙所在的两条边上的颜色均值
+	    FOREACHPTR(pSeamVertex, seamVertices) {
 			const SeamVertex& seamVertex0 = *pSeamVertex;
 			if (seamVertex0.patches.GetSize() < 2)
 				continue;
-			const uint32_t idxVertPatch0(seamVertex0.patches.Find(idxPatch));
+
+			const uint32_t idxVertPatch0(seamVertex0.patches.Find(idxPatch));   // 当前顶点块索引
 			if (idxVertPatch0 == SeamVertex::Patches::NO_INDEX)
 				continue;
-			const SeamVertex::Patch& patch0 = seamVertex0.patches[idxVertPatch0];
+
+			const SeamVertex::Patch& patch0 = seamVertex0.patches[idxVertPatch0];   // 当前块
 			const TexCoord p0(patch0.proj-offset);
-			// for each edge of this vertex belonging to this patch...
+
+			// 对于属于此补丁的顶点的每条边...
 			FOREACHPTR(pEdge0, patch0.edges) {
-				// select the same edge leaving from the adjacent vertex
-				const SeamVertex& seamVertex1 = seamVertices[pEdge0->idxSeamVertex];
-				const uint32_t idxVertPatch0Adj(seamVertex1.patches.Find(idxPatch));
+				// 选择从相邻顶点离开的相同边
+				const SeamVertex& seamVertex1 = seamVertices[pEdge0->idxSeamVertex];        // patch0的边 的缝隙顶点
+				const uint32_t idxVertPatch0Adj(seamVertex1.patches.Find(idxPatch));        // 查找缝隙顶点所在的块 (相邻顶点块)
 				ASSERT(idxVertPatch0Adj != SeamVertex::Patches::NO_INDEX);
+
 				const SeamVertex::Patch& patch0Adj = seamVertex1.patches[idxVertPatch0Adj];
 				const TexCoord p0Adj(patch0Adj.proj-offset);
-				// find the other patch sharing the same edge (edge with same adjacent vertex)
+
+				// 查找共享同一条边（具有相同相邻顶点的边）的另一个贴片
 				FOREACH(idxVertPatch1, seamVertex0.patches) {
 					if (idxVertPatch1 == idxVertPatch0)
 						continue;
-					const SeamVertex::Patch& patch1 = seamVertex0.patches[idxVertPatch1];
-					const uint32_t idxEdge1(patch1.edges.Find(pEdge0->idxSeamVertex));
+
+					const SeamVertex::Patch& patch1 = seamVertex0.patches[idxVertPatch1];   // 临近块
+					const uint32_t idxEdge1(patch1.edges.Find(pEdge0->idxSeamVertex));  // 临近块缝隙顶点所在边
 					if (idxEdge1 == SeamVertex::Patch::Edges::NO_INDEX)
 						continue;
-					const TexCoord& p1(patch1.proj);
-					// select the same edge belonging to the second patch leaving from the adjacent vertex
+
+					const TexCoord& p1(patch1.proj);  // 此顶点在此补丁中的投影
+
+					// 选择属于从相邻顶点离开的第二贴片的相同边
 					const uint32_t idxVertPatch1Adj(seamVertex1.patches.Find(patch1.idxPatch));
 					ASSERT(idxVertPatch1Adj != SeamVertex::Patches::NO_INDEX);
 					const SeamVertex::Patch& patch1Adj = seamVertex1.patches[idxVertPatch1Adj];
 					const TexCoord& p1Adj(patch1Adj.proj);
-					// this is an edge separating two (valid) patches;
-					// draw it on this patch as the mean color of the two patches
+
+					// 这是分隔两个（有效）补丁的边；
+                    // 在此补丁上绘制它作为两个补丁的平均颜色
 					const Image8U3& image1(images[texturePatches[patch1.idxPatch].label].image);
 					RasterPatchMeanEdgeData data(image, mask, imageOrg, image1, p0, p0Adj, p1, p1Adj);
 					Image32F3::DrawLine(p0, p0Adj, data);
-					// skip remaining patches,
-					// as a manifold edge is shared by maximum two face (one in each patch), which we found already
 					break;
 				}
 			}
 		}
-		// render the vertices at the patch border meeting neighbor patches
+
+		// 在贴片边界处渲染顶点，与相邻贴片相遇
 		const Sampler sampler;
 		FOREACHPTR(pSeamVertex, seamVertices) {
 			const SeamVertex& seamVertex = *pSeamVertex;
@@ -1803,11 +1818,12 @@ void MeshTexture::LocalSeamLeveling()
 			const uint32_t idxVertPatch(seamVertex.patches.Find(idxPatch));
 			if (idxVertPatch == SeamVertex::Patches::NO_INDEX)
 				continue;
-			AccumColor accumColor;
+
+			AccumColor accumColor;	// 对任意类型进行操作的加权累加器类
 			// for each patch...
 			FOREACHPTR(pPatch, seamVertex.patches) {
 				const SeamVertex::Patch& patch = *pPatch;
-				// add its view to the vertex mean color
+				//将其视图添加到顶点平均颜色
 				const Image8U3& img(images[texturePatches[patch.idxPatch].label].image);
 				accumColor.Add(img.sample<Sampler,Color>(sampler, patch.proj)/255.f, 1.f);
 			}
@@ -1816,12 +1832,12 @@ void MeshTexture::LocalSeamLeveling()
 			image(pt) = accumColor.Normalized();
 			mask(pt) = border;
 		}
-		// make sure the border is continuous and
-		// keep only the exterior tripe of the given size
-		ProcessMask(mask, 20);
-		// compute texture patch blending
-		PoissonBlending(imageOrg, image, mask);
-		// apply color correction to the patch image
+
+		// 确保边框是连续的，并且只保留给定大小的外部
+		ProcessMask(mask, 20);		// 论文 Poisson Editing
+		// 计算纹理贴片混合
+		PoissonBlending(imageOrg, image, mask);	// 泊松混合
+		// 对补丁图像应用颜色校正
 		cv::Mat imagePatch(images[texturePatch.label].image(texturePatch.rect));
 		for (int r=0; r<image.rows; ++r) {
 			for (int c=0; c<image.cols; ++c) {
@@ -1926,19 +1942,26 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		}
 	}
 
-	// 合并纹理贴图与重叠矩形
+	// 合并纹理贴图与重叠矩形   计算重叠
+	// 遍历贴图块
 	for (unsigned i=0; i<texturePatches.GetSize()-2; ++i) {
 		TexturePatch& texturePatchBig = texturePatches[i];
+
 		for (unsigned j=1; j<texturePatches.GetSize()-1; ++j) {
 			if (i == j)
 				continue;
 			TexturePatch& texturePatchSmall = texturePatches[j];
-			if (texturePatchBig.label != texturePatchSmall.label)
+
+			if (texturePatchBig.label != texturePatchSmall.label)	// label - 对应图片id
 				continue;
-			if (!RectsBinPack::IsContainedIn(texturePatchSmall.rect, texturePatchBig.rect))
+
+			// 如果A包含在B中的边框上，则返回True。
+			if (!RectsBinPack::IsContainedIn(texturePatchSmall.rect, texturePatchBig.rect))	// 边界框
 				continue;
+
 			// 平移纹理坐标
-			const TexCoord offset(texturePatchSmall.rect.tl()-texturePatchBig.rect.tl());
+			const TexCoord offset(texturePatchSmall.rect.tl()-texturePatchBig.rect.tl());	// 坐标便宜
+			// 存在重合 进行合并
 			FOREACHPTR(pIdxFace, texturePatchSmall.faces) {
 				const FIndex idxFace(*pIdxFace);
 				TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
@@ -1958,12 +1981,13 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		RectsBinPack::RectArr rects(texturePatches.GetSize());
 		FOREACH(i, texturePatches)
 			rects[i] = texturePatches[i].rect;
-		int textureSize(RectsBinPack::ComputeTextureSize(rects, nTextureSizeMultiple));
+		int textureSize(RectsBinPack::ComputeTextureSize(rects, nTextureSizeMultiple));	//纹理大小
+
 		// 增加纹理大小，直到所有贴片都适合
 		while (true) {
 			TD_TIMER_STARTD();
 			bool bPacked(false);
-			const unsigned typeRectsBinPack(nRectPackingHeuristic/100);
+			const unsigned typeRectsBinPack(nRectPackingHeuristic/100);	// 3 / 100
 			const unsigned typeSplit((nRectPackingHeuristic-typeRectsBinPack*100)/10);
 			const unsigned typeHeuristic(nRectPackingHeuristic%10);
 			switch (typeRectsBinPack) {
@@ -1992,21 +2016,24 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		const float invNorm(1.f/(float)(textureSize-1));
 		textureDiffuse.create(textureSize, textureSize);
 		textureDiffuse.setTo(cv::Scalar(colEmpty.b, colEmpty.g, colEmpty.r));
+
 		#ifdef TEXOPT_USE_OPENMP
 		#pragma omp parallel for schedule(dynamic)
 		for (int_t i=0; i<(int_t)texturePatches.GetSize(); ++i) {
 		#else
 		FOREACH(i, texturePatches) {
 		#endif
-			const uint32_t idxPatch((uint32_t)i);
-			const TexturePatch& texturePatch = texturePatches[idxPatch];
-			const RectsBinPack::Rect& rect = rects[idxPatch];
+			const uint32_t idxPatch((uint32_t)i);	// 块id
+			const TexturePatch& texturePatch = texturePatches[idxPatch];	// 纹理块
+			const RectsBinPack::Rect& rect = rects[idxPatch];	// 矩形
 			// 复制补丁块图像
 			ASSERT((rect.width == texturePatch.rect.width && rect.height == texturePatch.rect.height) ||
 				   (rect.height == texturePatch.rect.width && rect.width == texturePatch.rect.height));
+
 			int x(0), y(1);
 			if (texturePatch.label != NO_ID) {
 				const Image& imageData = images[texturePatch.label];
+
 				cv::Mat patch(imageData.image(texturePatch.rect));
 				if (rect.width != texturePatch.rect.width) {
 					// 翻转贴片和纹理坐标
@@ -2015,6 +2042,7 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 				}
 				patch.copyTo(textureDiffuse(rect));
 			}
+
 			// 计算最终纹理坐标
 			const TexCoord offset(rect.tl());
 			FOREACHPTR(pIdxFace, texturePatch.faces) {

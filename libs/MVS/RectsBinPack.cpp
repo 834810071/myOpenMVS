@@ -476,6 +476,7 @@ void MaxRectsBinPack::PruneFreeList()
 int MaxRectsBinPack::ComputeTextureSize(const RectArr& rects, int mult)
 {
 	int area(0), maxSizePatch(0);
+
 	FOREACHPTR(pRect, rects) {
 		const Rect& rect = *pRect;
 		area += rect.area();

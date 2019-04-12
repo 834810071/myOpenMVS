@@ -2233,7 +2233,7 @@ typedef TBitMatrix<size_t> BitMatrix;
 /*----------------------------------------------------------------*/
 
 
-// weighted accumulator class that operates on arbitrary types
+// 对任意类型进行操作的加权累加器类
 template <typename TYPE, typename ACCUMTYPE=TYPE, typename WEIGHTTYPE=float>
 struct TAccumulator {
 	typedef TYPE Type;
