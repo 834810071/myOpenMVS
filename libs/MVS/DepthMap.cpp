@@ -253,7 +253,7 @@ DepthEstimator::DepthEstimator(DepthData& _depthData0, volatile Thread::safe_t& 
 	thMagnitudeSq(OPTDENSE::fDescriptorMinMagnitudeThreshold>0?SQUARE(OPTDENSE::fDescriptorMinMagnitudeThreshold):-1.f),
 	angle1Range(FD2R(OPTDENSE::fRandomAngle1Range)),
 	angle2Range(FD2R(OPTDENSE::fRandomAngle2Range)),
-	thConfSmall(OPTDENSE::fNCCThresholdKeep*0.25f),
+	thConfSmall(OPTDENSE::fNCCThresholdKeep*0.25f),	// 0.5 0.3
 	thConfBig(OPTDENSE::fNCCThresholdKeep*0.5f),
 	thRobust(OPTDENSE::fNCCThresholdKeep*1.2f)
 {
@@ -280,15 +280,15 @@ bool DepthEstimator::FillPixelPatch()
 	return normSq0 > thMagnitudeSq;
 }
 
-// compute pixel's NCC score  计算NCC分数
+//  计算像素的NCC分数
 float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 {
 	ASSERT(depth > 0 && normal.dot(Cast<float>(static_cast<const Point3&>(X0))) < 0);
 	FOREACH(idx, images) {
-		// center a patch of given size on the segment and fetch the pixel values in the target image
+		// 将给定大小的补丁放在段的中心，并获取目标图像中的像素值
 		const ViewData& image1 = images[idx];
 		float& score = scores[idx];
-		const Matrix3x3f H(ComputeHomographyMatrix(image1, depth, normal));
+		const Matrix3x3f H(ComputeHomographyMatrix(image1, depth, normal));	// 单应矩阵
 		Point2f pt;
 		int n(0);
 		float sum(0);
@@ -297,7 +297,9 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 		#endif
 		for (int i=-nSizeHalfWindow; i<=nSizeHalfWindow; ++i) {
 			for (int j=-nSizeHalfWindow; j<=nSizeHalfWindow; ++j) {
+				// (optimized ProjectVertex for H[3,3] and X[2,1], output pt[2,1])
 				ProjectVertex_3x3_2_2(H.val, Point2f((float)(x0.x+j), (float)(x0.y+i)).ptr(), pt.ptr());
+
 				if (!image1.view.image.isInsideWithBorder<float,1>(pt)) {
 					score = thRobust;
 					goto NEXT_IMAGE;
@@ -314,7 +316,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 		}
 		{
 		ASSERT(n == nTexels);
-		// score similarity of the reference and target texture patches
+		// 参考纹理贴片和目标纹理贴片的评分相似性
 		#if DENSE_NCC == DENSE_NCC_FAST
 		const float normSq1(sumSq-SQUARE(sum/nSizeWindow));
 		#else
@@ -330,7 +332,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 		#endif
 		const float ncc(CLAMP(num/SQRT(nrm), -1.f, 1.f));
 		score = 1.f - ncc;
-		// encourage smoothness
+		// 增加平滑
 		for (const NeighborData& neighbor: neighborsData) {
 			score *= 1.f - smoothBonusDepth * EXP(SQUARE((depth-neighbor.depth)/depth) * smoothSigmaDepth);
 			score *= 1.f - smoothBonusNormal * EXP(SQUARE(ACOS(ComputeAngle<float,float>(normal.ptr(), neighbor.normal.ptr()))) * smoothSigmaNormal);
@@ -342,7 +344,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 	// set score as the nth element
 	return scores.size() > 1 ? scores.GetNth(idxScore) : scores.front();
 	#elif DENSE_AGGNCC == DENSE_AGGNCC_MEAN
-	// set score as the average similarity
+	// 将得分设置为平均相似度
 	return scores.mean();
 	#else
 	// set score as the min similarity
@@ -352,7 +354,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 
 
 // 运行传播和随机细化循环；
-// 还可以传播属于目标映像的解决方案
+// 还可以传播属于目标映像的解决方案  针对一个像素点进行临近传播 和 随机细化
 void DepthEstimator::ProcessPixel(IDX idx)
 {
 	// 从像素索引及其邻居计算像素坐标
@@ -367,10 +369,11 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		// 查找邻居
 		neighbors.Empty();
 		neighborsData.Empty();
+		// 保存当前跟点云存在对应关系的像素
 		if (dir == LT2RB) {
 			// 从左上角到右下角的方向   nSizeHalfWindow - 3 n半窗口大小
 			if (x0.x > nSizeHalfWindow) {
-				const ImageRef nx(x0.x-1, x0.y);
+				const ImageRef nx(x0.x-1, x0.y);	// 上
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0) {
 					neighbors.emplace_back(nx);
@@ -378,7 +381,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				}
 			}
 			if (x0.y > nSizeHalfWindow) {
-				const ImageRef nx(x0.x, x0.y-1);
+				const ImageRef nx(x0.x, x0.y-1);	// 左
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0) {
 					neighbors.emplace_back(nx);
@@ -386,13 +389,13 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				}
 			}
 			if (x0.x < size.width-nSizeHalfWindow) {
-				const ImageRef nx(x0.x+1, x0.y);
+				const ImageRef nx(x0.x+1, x0.y);	// 下
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0)
 					neighborsData.emplace_back(ndepth,normalMap0(nx));
 			}
 			if (x0.y < size.height-nSizeHalfWindow) {
-				const ImageRef nx(x0.x, x0.y+1);
+				const ImageRef nx(x0.x, x0.y+1);	// 右
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0)
 					neighborsData.emplace_back(ndepth,normalMap0(nx));
@@ -401,7 +404,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 			ASSERT(dir == RB2LT);
 			// 从右下角到左上角的方向
 			if (x0.x < size.width-nSizeHalfWindow) {
-				const ImageRef nx(x0.x+1, x0.y);
+				const ImageRef nx(x0.x+1, x0.y);	// 下
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0) {
 					neighbors.emplace_back(nx);
@@ -409,7 +412,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				}
 			}
 			if (x0.y < size.height-nSizeHalfWindow) {
-				const ImageRef nx(x0.x, x0.y+1);
+				const ImageRef nx(x0.x, x0.y+1);	// 右
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0) {
 					neighbors.emplace_back(nx);
@@ -417,26 +420,28 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				}
 			}
 			if (x0.x > nSizeHalfWindow) {
-				const ImageRef nx(x0.x-1, x0.y);
+				const ImageRef nx(x0.x-1, x0.y);	// 上
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0)
 					neighborsData.emplace_back(ndepth,normalMap0(nx));
 			}
 			if (x0.y > nSizeHalfWindow) {
-				const ImageRef nx(x0.x, x0.y-1);
+				const ImageRef nx(x0.x, x0.y-1);	// 左
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0)
 					neighborsData.emplace_back(ndepth,normalMap0(nx));
 			}
 		}
+
 		Depth& depth = depthMap0(x0);
 		Normal& normal = normalMap0(x0);
 		const Normal viewDir(Cast<float>(static_cast<const Point3&>(X0)));
 		ASSERT(depth > 0 && normal.dot(viewDir) < 0);
-		// 检查是否有任何邻居估计值比当前估计值更好
+		// 检查是否有任何邻居估计值比当前估计值更好  临近传播
 		FOREACH(n, neighbors) {
 			float nconf(confMap0(neighbors[n]));
 			const unsigned ninvScaleRange(DecodeScoreScale(nconf));
+
 			if (nconf >= OPTDENSE::fNCCThresholdKeep)
 				continue;
 			const NeighborData& neighbor = neighborsData[n];
@@ -445,6 +450,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 				continue;
 			const float newconf(ScorePixel(neighbor.depth, neighbor.normal));
 			ASSERT(newconf >= 0 && newconf <= 2);
+			// 如果新的匹配代价小
 			if (conf > newconf) {
 				conf = newconf;
 				depth = neighbor.depth;
@@ -454,8 +460,9 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		}
 
 		// 检查几个接近当前估计值的随机解决方案，试图找到更好的估计值
-		float depthRange(MaxDepthDifference(depth, OPTDENSE::fRandomDepthRatio));
-		if (invScaleRange > OPTDENSE::nRandomMaxScale)
+		float depthRange(MaxDepthDifference(depth, OPTDENSE::fRandomDepthRatio));	// fRandomDepthRatio = 0.01
+
+		if (invScaleRange > OPTDENSE::nRandomMaxScale)	// 2
 			invScaleRange = OPTDENSE::nRandomMaxScale;
 		else if (invScaleRange == 0) {
 			if (conf <= thConfSmall)
@@ -467,22 +474,26 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		Point2f p;
 		Normal2Dir(normal, p);
 		Normal nnormal;
+		// 随机细化
 		for (unsigned iter=invScaleRange; iter<OPTDENSE::nRandomIters; ++iter) {
+			// 随机深度 在0.1范围内
 			const Depth ndepth(randomMeanRange(depth, depthRange*scaleRange));
 			if (!ISINSIDE(ndepth, dMin, dMax))
 				continue;
+			// 随机法向量
 			const Point2f np(randomMeanRange(p.x, angle1Range*scaleRange), randomMeanRange(p.y, angle2Range*scaleRange));
 			Dir2Normal(np, nnormal);
 			if (nnormal.dot(viewDir) >= 0)
 				continue;
 			const float nconf(ScorePixel(ndepth, nnormal));
 			ASSERT(nconf >= 0);
+			// 新的随机符合条件
 			if (conf > nconf) {
 				conf = nconf;
 				depth = ndepth;
 				normal = nnormal;
 				p = np;
-				scaleRange *= 0.5f;
+				scaleRange *= 0.5f;	// 范围减半
 				++invScaleRange;
 			}
 		}

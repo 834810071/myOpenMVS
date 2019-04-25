@@ -292,7 +292,7 @@ bool DepthMapsData::SelectViews(DepthData& depthData)
 	depthData.neighbors.CopyOf(scene.images[idxImage].neighbors);
 
 	// 移除无效的邻居视图
-	const float fMinArea(OPTDENSE::fMinArea);
+	const float fMinArea(OPTDENSE::fMinArea);     // 0.1
 	const float fMinScale(0.2f), fMaxScale(3.2f);
 	const float fMinAngle(FD2R(OPTDENSE::fMinAngle));
 	const float fMaxAngle(FD2R(OPTDENSE::fMaxAngle));
@@ -337,7 +337,7 @@ bool DepthMapsData::InitViews(DepthData& depthData, IIndex idxNeighbor, IIndex n
 		FOREACH(idx, depthData.neighbors) {
 			const ViewScore& neighbor = depthData.neighbors[idx];
 			if ((numNeighbors && depthData.images.GetSize() > numNeighbors) ||
-				(neighbor.score < fMinScore))
+				(neighbor.score < fMinScore))   // todo
 				break;
 			DepthData::ViewData& imageTrg = depthData.images.AddEmpty();
 			imageTrg.pImageData = &scene.images[neighbor.idx.ID];
@@ -560,24 +560,30 @@ void* STCALL DepthMapsData::ScoreDepthMapTmp(void* arg)
 		Normal& normal = estimator.normalMap0(x);
 		const Normal viewDir(Cast<float>(static_cast<const Point3&>(estimator.X0)));	// 法线
 		if (depth <= 0) {
-			// 随机数初始化
+			// 随机数初始化   todo
 			depth = DepthEstimator::RandomDepth(estimator.dMin, estimator.dMax);
 			normal = DepthEstimator::RandomNormal(viewDir);
 		} else if (normal.dot(viewDir) >= 0) {
 			// 用随机值替换无效的法线
 			normal = DepthEstimator::RandomNormal(viewDir);
 		}
-		estimator.confMap0(x) = DepthEstimator::EncodeScoreScale(estimator.ScorePixel(depth, normal));	// 计算NCC分数  公式6
-	}
+		// 置信度就是NCC
+		estimator.confMap0(x) = DepthEstimator::EncodeScoreScale(estimator.ScorePixel(depth, normal));	// 计算NCC分数  公式6 todo
+ 	}
 	return NULL;
 }
-// 游程传播和随机精化循环
+// 传播和随机细化循环
 void* STCALL DepthMapsData::EstimateDepthMapTmp(void* arg)
 {
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
 	IDX idx;
-	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize())
+	//int times = 0;
+	// 只进行一次
+	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize()) {
+	//	times++;
 		estimator.ProcessPixel(idx);
+	}
+	//cout << "times\t" << time << endl;
 	return NULL;
 }
 // 删除分数太大的所有估计并反转置信度映射
@@ -585,7 +591,8 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 {
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
 	IDX idx;
-	const float fOptimAngle(FD2R(OPTDENSE::fOptimAngle));
+	const float fOptimAngle(FD2R(OPTDENSE::fOptimAngle));	// 计算深度三角剖分的最佳角度  10
+
 	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize()) {
 		const ImageRef& x = estimator.coords[idx];
 		Depth& depth = estimator.depthMap0(x);
@@ -593,7 +600,8 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 		float& conf = estimator.confMap0(x);
 		const unsigned invScaleRange(DepthEstimator::DecodeScoreScale(conf));	// 解码置信分数
 		ASSERT(depth >= 0);
-		// 检查分数是否足够好，交叉估计是否与当前估计足够接近
+
+		// 检查分数是否足够好，交叉估计是否与当前估计足够接近  0.5 0.3 匹配代价得要小  0.5
 		if (conf > OPTDENSE::fNCCThresholdKeep) {	// 最大1 - 比较接受的NCC分数
 			#if 1 // 如果间隙插值有效，则使用
 			conf = 0;
@@ -611,7 +619,7 @@ void* STCALL DepthMapsData::EndDepthMapTmp(void* arg)
 			#else
 			const float fCosAngle(estimator.scores.minCoeff());
 			#endif
-			const float wAngle(MINF(POW(ACOS(fCosAngle)/fOptimAngle,1.5f),1.f));
+			const float wAngle(MINF(POW(ACOS(fCosAngle)/fOptimAngle,1.5f),1.f));	// 将三角测量的角度降低到10度以下 todo 公式
 			#else
 			const float wAngle(1.f);
 			#endif
@@ -649,6 +657,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	// 初始化深度和法线图
 	DepthData& depthData(arrDepthData[idxImage]);
 	ASSERT(depthData.images.GetSize() > 1 && !depthData.points.IsEmpty());
+	int depthDataImagesSize = depthData.images.GetSize();
 
 	const DepthData::ViewData& image(depthData.images.First()); // 当前视图 参考视图
 	ASSERT(!image.image.empty() && !depthData.images[1].image.empty()); // （image.image 图像浮动强度 float类型）
@@ -662,10 +671,11 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	// 初始化深度图
 	if (OPTDENSE::nMinViewsTrustPoint < 2) {    // 校准图像数量  最小视图数，以便考虑该点来近似深度图(<2-随机初始化）
 		// 计算深度范围并初始化已知深度
-		const int nPixelArea(3); // 要用已知深度初始化的像素周围的半个窗口大小
+		const int nPixelArea(3); // 要用已知深度初始化的像素周围的半个窗口大小  窗口大小为6
 		const Camera& camera = depthData.images.First().camera; // 参考图像相机矩阵 (K R C P)
 		depthData.dMin = FLT_MAX;
 		depthData.dMax = 0;
+
 		FOREACHPTR(pPoint, depthData.points) {  // 此图像看到的稀疏3D点的索引
 			const PointCloud::Point& X = scene.pointcloud.points[*pPoint];  // 点云中的点坐标
 			const Point3 camX(camera.TransformPointW2C(Cast<REAL>(X)));     // 坐标转换为相机坐标系下
@@ -675,7 +685,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 			const float d((float)camX.z);   // 深度
 			const ImageRef sx(MAXF(x.x-nPixelArea,0), MAXF(x.y-nPixelArea,0)); // 开始坐标
 			const ImageRef ex(MINF(x.x+nPixelArea,size.width-1), MINF(x.y+nPixelArea,size.height-1));   // 结束坐标
-			// 对深度进行赋值
+			// 对深度进行赋值   该窗口的所有元素的深度设为一个值
 			for (int y=sx.y; y<=ex.y; ++y)
 				for (int x=sx.x; x<=ex.x; ++x)
 					depthData.depthMap(y,x) = d;
@@ -684,6 +694,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 			if (depthData.dMax < d)
 				depthData.dMax = d;
 		}
+
 		depthData.dMin *= 0.9f;
 		depthData.dMax *= 1.1f;
 	} else {
@@ -727,7 +738,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 		ASSERT(estimators.GetSize() == threads.GetSize()+1);
 		FOREACH(i, threads)
 			threads[i].start(ScoreDepthMapTmp, &estimators[i]);
-		ScoreDepthMapTmp(&estimators.Last());   // 公式6
+		ScoreDepthMapTmp(&estimators.Last());   // 公式6 qiu 1 - NCC
 		// 等待工作线程结束
 		FOREACHPTR(pThread, threads)
 			pThread->join();
@@ -802,7 +813,7 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 // 从给定深度图中筛选出小深度段
 bool DepthMapsData::RemoveSmallSegments(DepthData& depthData)
 {
-	const float fDepthDiffThreshold(OPTDENSE::fDepthDiffThreshold*0.7f);	// 细化过程中深度允许的最大差异
+	const float fDepthDiffThreshold(OPTDENSE::fDepthDiffThreshold*0.7f);	// 细化过程中深度允许的最大差异 0.1 * 0.7
 	unsigned speckle_size = OPTDENSE::nSpeckleSize;	// 斑点的最大尺寸（小斑点被去除） 100
 	DepthMap& depthMap = depthData.depthMap;
 	NormalMap& normalMap = depthData.normalMap;
@@ -1032,7 +1043,7 @@ bool DepthMapsData::GapInterpolation(DepthData& depthData)
 
 
 // 使用基于置信度的融合或相邻像素一次过滤一个像素的深度图
-bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idxNeighbors, bool 	bAdjust)
+bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idxNeighbors, bool bAdjust)
 {
 	TD_TIMER_STARTD();
 
@@ -1042,6 +1053,7 @@ bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idx
 	ASSERT(OPTDENSE::nMinViewsFilter > 0 && scene.nCalibratedImages > 1);
 	// nMinViewsFilter 与估计值一致的最小图像数，以便将其考虑在内
 	const IIndex nMinViews(MINF(OPTDENSE::nMinViewsFilter,scene.nCalibratedImages-1));
+
 	// nMinViewsFilterAdjust 符合估计的最小映像数，以便将其视为内部映像（0-禁用）
 	const IIndex nMinViewsAdjust(MINF(OPTDENSE::nMinViewsFilterAdjust,scene.nCalibratedImages-1));
 	if (N < nMinViews || N < nMinViewsAdjust) {
@@ -1055,20 +1067,24 @@ bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idx
 	const Camera& cameraRef = imageRef.camera;
 	DepthMapArr depthMaps(N);
 	ConfidenceMapArr confMaps(N);
+
 	FOREACH(n, depthMaps) {
 		DepthMap& depthMap = depthMaps[n];
 		depthMap.create(sizeRef);
 		depthMap.memset(0);
 		ConfidenceMap& confMap = confMaps[n];
+
 		if (bAdjust) {	// 如果需要调整
 			confMap.create(sizeRef);
 			confMap.memset(0);
 		}
+
 		const IIndex idxView = depthDataRef.neighbors[idxNeighbors[(IIndex)n]].idx.ID;
 		const DepthData& depthData = arrDepthData[idxView];
 		const Camera& camera = depthData.images.First().camera;	// 参考图像对应的相机参数
 		const Image8U::Size size(depthData.depthMap.size());
-		// 遍历该深度图的每个图像
+
+		// 遍历该深度图的每个图像 找到特征对应点
 		for (int i=0; i<size.height; ++i) {
 			for (int j=0; j<size.width; ++j) {
 				const ImageRef x(j,i);
@@ -1121,7 +1137,7 @@ bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idx
 	}
 
 	// 细化过程中深度允许的最大差异
-	const float thDepthDiff(OPTDENSE::fDepthDiffThreshold*1.2f);
+	const float thDepthDiff(OPTDENSE::fDepthDiffThreshold*1.2f);	// 0.01
 	DepthMap newDepthMap(sizeRef);
 	ConfidenceMap newConfMap(sizeRef);
 	#if TD_VERBOSE != TD_VERBOSE_OFF
@@ -1133,6 +1149,7 @@ bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idx
 		for (int i=0; i<sizeRef.height; ++i) {
 			for (int j=0; j<sizeRef.width; ++j) {
 				const ImageRef xRef(j,i);
+
 				const Depth depth(depthDataRef.depthMap(xRef));
 				if (depth == 0) {
 					newDepthMap(xRef) = 0;
@@ -1177,6 +1194,7 @@ bool DepthMapsData::FilterDepthMap(DepthData& depthDataRef, const IIndexArr& idx
 							const Camera& camera = depthData.images.First().camera;
 							const Point3 X(cameraRef.TransformPointI2W(Point3(xRef.x,xRef.y,depth)));
 							const ImageRef x(ROUND2INT(camera.TransformPointW2I(X)));
+
 							if (depthData.confMap.isInside(x)) {
 								const float c(depthData.confMap(x));
 								negConf += (c > 0 ? c : confMaps[n](xRef));
@@ -1577,7 +1595,7 @@ bool Scene::DenseReconstruction()
 		bool bAbort(false);
 		#pragma omp parallel for shared(data, bAbort)   // 对for循环进行并行
 
-		// 从Scene类中导入图像 遍历图像
+		// 从Scene类中导入图像 遍历图像  加载Scene所有的图像到DenseDepthMapData类中
 		for (int_t ID=0; ID<(int_t)images.GetSize(); ++ID) {
 			#pragma omp flush (bAbort)
 			if (bAbort)
@@ -1601,12 +1619,12 @@ bool Scene::DenseReconstruction()
 			#pragma omp critical    // 遇到if定义的情况时，限定以下的部分一次只用一个线程
 			#endif
 			{
-				imagesMap[idxImage] = data.images.GetSize();    // 为该图像所关联的图像申请空间
+				imagesMap[idxImage] = data.images.GetSize();    // 为该图像所关联的图像申请空间  图片总数
 				data.images.Insert(idxImage);   // 保存该图像
 			}
 			// 以适当的分辨率重新加载图像  重新计算最大分辨率
 			const unsigned nMaxResolution(imageData.RecomputeMaxResolution(OPTDENSE::nResolutionLevel, OPTDENSE::nMinResolution));
-			if (!imageData.ReloadImage(nMaxResolution)) {   // 根据新的分辨率设置图片大小
+			if (!imageData.ReloadImage(nMaxResolution)) {   // 根据新的分辨率设置图片大小  基本不进入
 				#ifdef DENSE_USE_OPENMP
 				bAbort = true;
 				#pragma omp flush (bAbort)
@@ -1655,7 +1673,7 @@ bool Scene::DenseReconstruction()
 			const IIndex idxImage(data.images[idx]);
 			ASSERT(imagesMap[idxImage] != NO_ID);
 
-			DepthData& depthData(data.detphMaps.arrDepthData[idxImage]);
+			DepthData& depthData(data.detphMaps.arrDepthData[idxImage]);	// 为该图像查找邻居图像
 			// 从最开始的深度图中选择有效的深度图  查找邻居 匹配对
 			if (!data.detphMaps.SelectViews(depthData)) {	// 利用评分选取有效的深度图
 				#ifdef DENSE_USE_OPENMP

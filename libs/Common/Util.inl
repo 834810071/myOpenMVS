@@ -818,7 +818,7 @@ inline TYPE FindAbsMaxElement(const TYPE* values, size_t n) {
 /*----------------------------------------------------------------*/
 
 
-// given an array of values and their bound, approximate the area covered, in percentage
+// 给定一组值及其界限，以百分比表示覆盖面积的近似值
 template<typename TYPE, int n, int s, bool bCentered>
 inline TYPE ComputeCoveredArea(const TYPE* values, size_t size, const TYPE* bound, int stride=n) {
 	ASSERT(size > 0);

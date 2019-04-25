@@ -204,7 +204,7 @@ struct MVS_API DepthEstimator {
 			Hr(image0.camera.K.inv()) {}
 	};
 
-	CLISTDEF0IDX(NeighborData,IIndex) neighborsData; // neighbor pixel depths to be used for smoothing
+	CLISTDEF0IDX(NeighborData,IIndex) neighborsData; // 邻接像素深度用于平滑
 	CLISTDEF0IDX(ImageRef,IIndex) neighbors; // neighbor pixels coordinates to be processed 要处理的相邻像素坐标
 	volatile Thread::safe_t& idxPixel; // current image index to be processed
 	Vec3 X0;	      //
