@@ -248,10 +248,9 @@ int main(int argc, LPCTSTR* argv)
 				scene.pointcloud.pointWeights.Release();
 			// 正文 算法
 			// 两个3D点的投影之间的最小距离（以像素为单位），以便在三角测量时考虑它们的不同（0-禁用） 2.5f
-			// 利用自由空间支持重构弱表示曲面  false
 			// 调整能见度加权时考虑的最小厚度的乘数  1.f
 			// 图切割中质量权重的乘子调整 1.f
-			if (!scene.ReconstructMesh(OPT::fDistInsert, OPT::bUseFreeSpaceSupport, 4, OPT::fThicknessFactor, OPT::fQualityFactor))
+			if (!scene.ReconstructMesh(OPT::fDistInsert, 4, OPT::fThicknessFactor, OPT::fQualityFactor))
 				return EXIT_FAILURE;
 			VERBOSE("Mesh reconstruction completed: %u vertices, %u faces (%s)", scene.mesh.vertices.GetSize(), scene.mesh.faces.GetSize(), TD_TIMER_GET_FMT().c_str());
 			#if TD_VERBOSE != TD_VERBOSE_OFF
