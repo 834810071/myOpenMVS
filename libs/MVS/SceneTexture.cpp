@@ -451,12 +451,13 @@ void MeshTexture::ListVertexFaces()
 }
 
 // 提取每个图像看到的面数组                    对faceDatas进行赋值                  6e-2f
-// 对应对应论文 数据项计算 + 图像一致性检查
+// 对应论文 数据项计算 + 图像一致性检查
 bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThreshold)
 {
 	// 创建顶点八叉树
 	facesDatas.Resize(faces.GetSize());
 	typedef std::unordered_set<FIndex> CameraFaces;
+
 	struct FacesInserter {
 		FacesInserter(const Mesh::VertexFacesArr& _vertexFaces, CameraFaces& _cameraFaces)
 			: vertexFaces(_vertexFaces), cameraFaces(_cameraFaces) {}
@@ -472,8 +473,8 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 				operator()(*pIdxVertex);
 		}
 
-		const Mesh::VertexFacesArr& vertexFaces;
-		CameraFaces& cameraFaces;
+		const Mesh::VertexFacesArr& vertexFaces;	// list
+		CameraFaces& cameraFaces;	// set
 	};
 
 	typedef TOctree<Mesh::VertexArr,float,3> Octree;
@@ -830,7 +831,7 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 	return true;
 }
 #endif
-//     视图选择                     6e-2f                0.1
+//     视图选择                            6e-2f                    0.1
 bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmoothness)
 {
 	// 提取与每个顶点关联的三角形数组 并判断该顶点是否在边缘处
@@ -840,6 +841,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 	{
 		// 列出每个面对应的所有视图
 		FaceDataViewArr facesDatas;
+
 		// 提取每个图像看到的面数组
 		// 数据项 + 图像一致性检查
 		if (!ListCameraFaces(facesDatas, fOutlierThreshold))	// fOutlierThreshold default(6e-2f)  对facesDatas进行赋值

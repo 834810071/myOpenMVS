@@ -411,6 +411,7 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 		typedef TIndexScore<float,float> DepthDist;	// 深度距离（作为评分）
 		typedef CLISTDEF0(DepthDist) DepthDistArr;
 		typedef Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::InnerStride<2> > FloatMap;
+
 		// 将平均深度处的四个图像角相加	输入数据
 		const CGAL::VertexHandle vcorners[] = {	// 存储4个角的点坐标  空间
 			delaunay.insert(CGAL::Point(0, 0, image.pImageData->avgDepth)),	// 左上角
