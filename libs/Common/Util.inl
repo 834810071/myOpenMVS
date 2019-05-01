@@ -612,7 +612,7 @@ inline TPoint3<TYPE> CorrectBarycentricCoordinates(TPoint2<TYPE> b) {
 // Encodes/decodes a normalized 3D vector in two parameters for the direction
 template<typename T, typename TR>
 inline void Normal2Dir(const TPoint3<T>& d, TPoint2<TR>& p) {
-	ASSERT(ISEQUAL(norm(d), T(1)));
+	//ASSERT(ISEQUAL(norm(d), T(1)));
 	#if 0
 	// empirically tested
 	p.y = TR(atan2(sqrt(d.x*d.x + d.y*d.y), d.z));

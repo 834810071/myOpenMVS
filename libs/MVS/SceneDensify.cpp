@@ -398,6 +398,7 @@ std::pair<float,float> TriangulatePointsDelaunay(CGAL::Delaunay& delaunay, const
 		const PointCloud::Point& point = scene.pointcloud.points[points[p]];    // 取出scene类中点云中的点
 		const Point3 ptCam(image.camera.TransformPointW2C(Cast<REAL>(point)));  // 转换为相机坐标系中  R * (X - C)
 		const Point2 ptImg(image.camera.TransformPointC2I(ptCam));              // 相机坐标系转换为像素 [K(0,2)+K(0,0)*x.x, K(1,2)+K(1,1)*x.y]
+
 		delaunay.insert(CGAL::Point(ptImg.x, ptImg.y, ptCam.z));                // 三角网格
 		const Depth depth((float)ptCam.z);                                      // 深度图
 		if (depthBounds.first > depth)
@@ -548,7 +549,8 @@ void* STCALL DepthMapsData::ScoreDepthMapTmp(void* arg)
 	DepthEstimator& estimator = *((DepthEstimator*)arg);
 	IDX idx;
 	while ((idx=(IDX)Thread::safeInc(estimator.idxPixel)) < estimator.coords.GetSize()) { // 存在置信度都进行遍历
-		const ImageRef& x = estimator.coords[idx];	// 参考图像索引
+		const ImageRef& x = estimator.coords[idx];	// 参考图像索引  structure containing the image pixels
+
 		// 将给定大小的补片居中放置在线段上      获取主图像中的补丁像素值
 		if (!estimator.PreparePixelPatch(x) || !estimator.FillPixelPatch()) {
 			estimator.depthMap0(x) = 0;
@@ -669,8 +671,9 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 	depthData.confMap.create(size); // 可信度
 	const unsigned nMaxThreads(scene.nMaxThreads);
 
-	// 初始化深度图
-	if (OPTDENSE::nMinViewsTrustPoint < 2) {    // 校准图像数量  最小视图数，以便考虑该点来近似深度图(<2-随机初始化）
+	// 初始化深度图OPTDENSE::nMinViewsTrustPoint < 2
+	//if (true)
+	{    // 校准图像数量  最小视图数，以便考虑该点来近似深度图(<2-随机初始化）
 		// 计算深度范围并初始化已知深度
 		const int nPixelArea(3); // 要用已知深度初始化的像素周围的半个窗口大小  窗口大小为6
 		const Camera& camera = depthData.images.First().camera; // 参考图像相机矩阵 (K R C P)
@@ -698,18 +701,19 @@ bool DepthMapsData::EstimateDepthMap(IIndex idxImage)
 
 		depthData.dMin *= 0.9f;
 		depthData.dMax *= 1.1f;
-	} else {
-		// 使用稀疏点云计算粗略估计
-		InitDepthMap(depthData);	// cgal三角剖分进行估计
-		#if TD_VERBOSE != TD_VERBOSE_OFF
-		// 将粗略深度图保存为图像 没有使用过
-		if (g_nVerbosityLevel > 4) {  // 冗长程度
-			ExportDepthMap(ComposeDepthFilePath(idxImage, "init.png"), depthData.depthMap);
-			ExportNormalMap(ComposeDepthFilePath(idxImage, "init.normal.png"), depthData.normalMap);
-			ExportPointCloud(ComposeDepthFilePath(idxImage, "init.ply"), *depthData.images.First().pImageData, depthData.depthMap, depthData.normalMap);
-		}
-		#endif
 	}
+//	else {
+//		// 使用稀疏点云计算粗略估计
+//		InitDepthMap(depthData);	// cgal三角剖分进行估计
+//		#if TD_VERBOSE != TD_VERBOSE_OFF
+//		// 将粗略深度图保存为图像 没有使用过
+//		if (g_nVerbosityLevel > 4) {  // 冗长程度
+//			ExportDepthMap(ComposeDepthFilePath(idxImage, "init.png"), depthData.depthMap);
+//			ExportNormalMap(ComposeDepthFilePath(idxImage, "init.normal.png"), depthData.normalMap);
+//			ExportPointCloud(ComposeDepthFilePath(idxImage, "init.ply"), *depthData.images.First().pImageData, depthData.depthMap, depthData.normalMap);
+//		}
+//		#endif
+//	}
 
 	// 初始化引用数据的图像 引用映射的整数图像和索引
 	Image64F imageSum0;
@@ -1480,6 +1484,7 @@ void DepthMapsData::FuseDepthMaps(PointCloud& pointcloud, bool bEstimateNormal)
 						invalidDepths.Insert(&depthB);
 					}
 				}
+
 				if (views.GetSize() < nMinViewsFuse) {
 					// 删除点
 					FOREACH(v, views) {

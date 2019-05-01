@@ -307,7 +307,7 @@ struct MVS_API DepthEstimator {
 	template<typename T, typename TR>
 	static inline void Normal2Dir(const TPoint3<T>& d, TPoint2<TR>& p) {
 		// empirically tested
-		ASSERT(ISEQUAL(norm(d), T(1)));
+		//ASSERT(ISEQUAL(norm(d), T(1)));
 		p.y = TR(atan2(sqrt(d.x*d.x + d.y*d.y), d.z));
 		p.x = TR(atan2(d.y, d.x));
 	}

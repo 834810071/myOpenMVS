@@ -305,7 +305,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 					goto NEXT_IMAGE;
 				}
 				#if DENSE_NCC == DENSE_NCC_FAST
-				const float v(image1.view.image.sample(pt));
+				const float v(image1.view.image.sample(pt));	// 双线性插值采样
 				sum += v;
 				sumSq += SQUARE(v);
 				num += texels0(n++)*v;
@@ -318,7 +318,7 @@ float DepthEstimator::ScorePixel(Depth depth, const Normal& normal)
 		ASSERT(n == nTexels);
 		// 参考纹理贴片和目标纹理贴片的评分相似性
 		#if DENSE_NCC == DENSE_NCC_FAST
-		const float normSq1(sumSq-SQUARE(sum/nSizeWindow));
+		const float normSq1(sumSq-SQUARE(sum/nSizeWindow));	// 	H
 		#else
 		const float normSq1(normSqDelta<float,float,nTexels>(texels1.data(), sum/(float)nTexels));
 		#endif
@@ -364,6 +364,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 
 	float& conf = confMap0(x0);	// x0 一个像素循环期间的常数 	confidence map
 	unsigned invScaleRange(DecodeScoreScale(conf));	// 解码NCC分数  得到NCC分数
+
 	// fNCCThresholdRefine 1-不再细化匹配的NCC分数                        填充像素贴片
 	if ((invScaleRange <= 2 || conf > OPTDENSE::fNCCThresholdRefine) && FillPixelPatch()) {
 		// 查找邻居
@@ -372,7 +373,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 		// 保存当前跟点云存在对应关系的像素
 		if (dir == LT2RB) {
 			// 从左上角到右下角的方向   nSizeHalfWindow - 3 n半窗口大小
-			if (x0.x > nSizeHalfWindow) {
+			if (x0.x > nSizeHalfWindow) {   // 防止溢出
 				const ImageRef nx(x0.x-1, x0.y);	// 上
 				const Depth ndepth(depthMap0(nx));
 				if (ndepth > 0) {
@@ -448,7 +449,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 			ASSERT(neighbor.depth > 0);
 			if (neighbor.normal.dot(viewDir) >= 0)
 				continue;
-			const float newconf(ScorePixel(neighbor.depth, neighbor.normal));
+			const float newconf(ScorePixel(neighbor.depth, neighbor.normal));   // 计算邻居的NCC
 			ASSERT(newconf >= 0 && newconf <= 2);
 			// 如果新的匹配代价小
 			if (conf > newconf) {
@@ -470,7 +471,7 @@ void DepthEstimator::ProcessPixel(IDX idx)
 			else if (conf <= thConfBig)
 				depthRange *= 0.5f;
 		}
-		float scaleRange(scaleRanges[invScaleRange]);
+		float scaleRange(scaleRanges[invScaleRange]);   // 缩小范围
 		Point2f p;
 		Normal2Dir(normal, p);
 		Normal nnormal;

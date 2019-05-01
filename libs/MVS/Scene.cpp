@@ -488,7 +488,7 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 		++nPoints;
 		// 对共享视图评分            C 平移（3，1），外部摄像机参数
 		const Point3f V1(imageData.camera.C - Cast<REAL>(point));
-		const float footprint1(Footprint(imageData.camera, point)); // 足迹
+		const float footprint1(Footprint(imageData.camera, point)); // 投影 半径为1
 		// 遍历看到该点的图片
 		FOREACHPTR(pView, views) {
 			const PointCloud::View& view = *pView;
@@ -498,9 +498,11 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 			const Image& imageData2 = images[view]; // view 是 int类型
 			const Point3f V2(imageData2.camera.C - Cast<REAL>(point));	// 平移关系
 			const float footprint2(Footprint(imageData2.camera, point));
+
 			const float fAngle(ACOS(ComputeAngle<float,float>(V1.ptr(), V2.ptr())));	// 角度   确定良好视差范围
 			const float fScaleRatio(footprint1/footprint2);	// 尺度
 			const float wAngle(MINF(POW(fAngle/fOptimAngle, 1.5f), 1.f));	// 公式2  todo
+
 			// 公式3  todo
 			float wScale;
 			if (fScaleRatio > 1.6f)
@@ -516,10 +518,11 @@ bool Scene::SelectNeighborViews(uint32_t ID, IndexArr& points, unsigned nMinView
 			++score.points;
 		}
 	}
-	imageData.avgDepth /= nPoints;
+	imageData.avgDepth /= nPoints;  // 该图像所有特征点的平均深度
 	ASSERT(nPoints > 3);
 
 	// 选择最佳 neighborViews
+	// 评分并存储对应角度 尺度 重叠面积 分数
 	Point2fArr pointsA(0, points.GetSize()), pointsB(0, points.GetSize());
 	FOREACH(IDB, images) {
 		const Image& imageDataB = images[IDB];
