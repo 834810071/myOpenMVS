@@ -693,7 +693,7 @@ inline triangle_vhandles_t getTriangle(cell_handle_t cell, int i)
 		cell->vertex((i+3)&3) );
 }
 
-// 计算包含给定刻面的平面与单元的外接球面之间的角度
+// 计算包含给定平面与单元的外接球面之间的角度
 // return 角的余弦
 float computePlaneSphereAngle(const delaunay_t& Tr, const facet_t& facet)
 {
@@ -1018,7 +1018,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                     do {
                         // 分配分数，按点到交叉点的距离加权
                         const edge_cap_t w(
-                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq)));  // 论文33 公式2
+                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq))); //　论文24 page6
                         // pair<Cell_handle, int>
                         edge_cap_t &f(infoCells[inter.facet.first->info()].f[inter.facet.second]);
 #ifdef DELAUNAY_USE_OPENMP
@@ -1052,7 +1052,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                         // 分配分数，按点到交叉点的距离加权
                         const facet_t &mf(delaunay.mirror_facet(inter.facet));  // 返回从另一个相邻单元格看到的相同面 即 图中的边赋值
                         const edge_cap_t w(
-                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq)));    // 论文33 公式2
+                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq)));    //　论文24 page6
                         edge_cap_t &f(infoCells[mf.first->info()].f[mf.second]);
 #ifdef DELAUNAY_USE_OPENMP
 #pragma omp atomic
@@ -1096,6 +1096,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                     if (cjID < ciID) continue;
                     const cell_info_t &cjInfo(infoCells[cjID]);
                     const int j(cj->index(ci));
+                     // 计算包含给定平面与单元的外接球面之间的角度  论文24 page7
                     const edge_cap_t q((1.f - MINF(computePlaneSphereAngle(delaunay, facet_t(ci, i)),
                                                    computePlaneSphereAngle(delaunay, facet_t(cj, j)))) * kQual);
                     graph.AddEdge(ciID, cjID, ciInfo.f[i] + q, cjInfo.f[j] + q);    // 添加边
@@ -1119,30 +1120,32 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
             for (delaunay_t::All_cells_iterator ci = delaunay.all_cells_begin(), ce = delaunay.all_cells_end();
                  ci != ce; ++ci) {
                 const cell_size_t ciID(ci->info());
-                // 一个网格四面体有四个面
+                // 一个网格四面体有四个邻居
                 for (int i = 0; i < 4; ++i) {
                     // 单元格是无限的，则继续
                     if (delaunay.is_infinite(ci, i)) continue;
 
-                    const cell_handle_t cj(ci->neighbor(i));
+                    const cell_handle_t cj(ci->neighbor(i));    // 第i个邻居
                     const cell_size_t cjID(cj->info()); // 邻居
                     if (ciID < cjID) continue;
 
                     const bool ciType(graph.IsNodeOnSrcSide(ciID)); // 当前节点类型 (s or t)
-                    if (ciType == graph.IsNodeOnSrcSide(cjID)) continue;    // 邻居节点类型应当与当前节点类型不一样
+                    if (ciType == graph.IsNodeOnSrcSide(cjID)) continue;    // 邻居节点类型应当与当前节点类型一样 则继续
 
                     Mesh::Face &face = mesh.faces.AddEmpty();
                     const triangle_vhandles_t tri(getTriangle(ci, i));  // 当前单元格 第i面
-                    // 遍历三角形三条边add_tweights
+
+                    // 遍历三角形三个顶点add_tweights
                     for (int v = 0; v < 3; ++v) {
-                        const vertex_handle_t vh(tri.verts[v]);
+                        const vertex_handle_t vh(tri.verts[v]); // 相邻面的第v个顶点
                         ASSERT(vh->point() == delaunay.triangle(ci, i)[v]);
 
+                        // map<void *, Mesh::VIndex>
                         const auto pairItID(mapVertices.insert(
                                 std::make_pair(vh.for_compact_container(), (Mesh::VIndex) mesh.vertices.GetSize())));
 
                         if (pairItID.second)
-                            mesh.vertices.Insert(CGAL2MVS<Mesh::Vertex::Type>(vh->point()));
+                            mesh.vertices.Insert(CGAL2MVS<Mesh::Vertex::Type>(vh->point()));    // 插入当前顶点
 
                         ASSERT(pairItID.first->second < mesh.vertices.GetSize());
                         face[v] = pairItID.first->second;
