@@ -477,8 +477,8 @@ bool MeshTexture::ListCameraFaces(FaceDataViewArr& facesDatas, float fOutlierThr
 		CameraFaces& cameraFaces;	// set
 	};
 
-	typedef TOctree<Mesh::VertexArr,float,3> Octree;
-	const Octree octree(vertices);
+	typedef TOctree<Mesh::VertexArr,float,3> Octree;	// 八叉树类型
+	const Octree octree(vertices);	// 顶点构成的八叉树
 	#if 0 && !defined(_RELEASE)
 	Octree::DEBUGINFO_TYPE info;
 	octree.GetDebugInfo(&info);
@@ -730,14 +730,15 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 	const float minCovariance(1e-3f); // 如果所有协方差都低于此值，则异常值检测将中止
 
 	const unsigned maxIterations(10);   // 最多迭代次数
-	const unsigned minInliers(4);   // 内点数小于4
+	const unsigned minInliers(4);   // 内点数小于4 即看到该点的视图数量
 
 	// 初始化颜色(color)数组
 	if (faceDatas.GetSize() <= minInliers)
 		return false;
 
-	Eigen::Matrix3Xd colorsAll(3, faceDatas.GetSize());
+	Eigen::Matrix3Xd colorsAll(3, faceDatas.GetSize());	// 三条边 3 * d
 	BoolArr inliers(faceDatas.GetSize());
+	// 标记为内点
 	FOREACH(i, faceDatas) {
 		colorsAll.col(i) = ((const Color::EVec)faceDatas[i].color).cast<double>();
 		inliers[i] = true;
@@ -751,9 +752,10 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 	for (unsigned iter = 0; iter < maxIterations; ++iter) {
 		// 仅计算内嵌项(inlier)的平均颜色和颜色协方差
 		const Eigen::Block<Eigen::Matrix3Xd,3,Eigen::Dynamic,!Eigen::Matrix3Xd::IsRowMajor> colors(colorsAll.leftCols(numInliers));
-		mean = colors.rowwise().mean(); // 颜色均值  第一步
+		mean = colors.rowwise().mean(); // 颜色均值  第一步  mu
 
 		// 协方差(i,j)=（第i列的所有元素-第i列的均值）*（第j列的所有元素-第j列的均值）
+		// cov = 1 / (m-1) * x.tranpose() * x
 		const Eigen::Matrix3Xd centered(colors.colwise() - mean);
 		covariance = (centered * centered.transpose()) / double(colors.cols() - 1); // 计算协方差  减去均值 除以数量
 
@@ -778,12 +780,13 @@ bool MeshTexture::FaceOutlierDetection(FaceDataArr& faceDatas, float thOutlier) 
 //        cout << lu << endl;
 //        cout << covarianceInv << endl;
 
-        // 筛选内层（高斯值高于阈值的所有视图）
+        // 筛选内点（高斯值高于阈值的所有视图）
 		numInliers = 0;
 		bool bChanged(false);
 		FOREACH(i, faceDatas) {
 			const Eigen::Vector3d color(((const Color::EVec)faceDatas[i].color).cast<double>());
 			// color -> 内点 mean -> all
+			// EXP(T(-0.5) * T(centered.adjoint() * covarianceInv * centered));
 			const double gaussValue(MultiGaussUnnormalized<double,3>(color, mean, covarianceInv));  // 求取高斯值
 
 			// 阀值比较
@@ -877,9 +880,9 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 							seamEdges.AddConstruct(idxFace, idxFaceAdj);
 						continue;
 					}
-					boost::add_edge(idxFace, idxFaceAdj, graph);	//两个相邻面都不为空
+					boost::add_edge(idxFace, idxFaceAdj, graph);	// 两个相邻面都不为空
 				}
-				afaces.Empty();
+				afaces.Empty();	// 清空
 			}
 
 			ASSERT((Mesh::FIndex)boost::num_vertices(graph) == faces.GetSize());	// 图中顶点数等于面数
@@ -918,16 +921,17 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			}
 
 			Histogram32F hist(std::make_pair(0.f, maxQuality), 1000);
-			//cout << hist.GetStart() << endl;
+
+			// cout << hist.GetStart() << endl;
 			FOREACHPTR(pFaceDatas, facesDatas) {
 				const FaceDataArr& faceDatas = *pFaceDatas;
 				FOREACHPTR(pFaceData, faceDatas)
 					hist.Add(pFaceData->quality);   // 位计数+1
 			}
-			const float normQuality(hist.GetApproximatePermille(0.95f));  // 返回近似的Permille
+			const float normQuality(hist.GetApproximatePermille(0.95f));  // 返回近似的Permille  千分比
 
 			#if TEXOPT_INFERENCE == TEXOPT_INFERENCE_LBP
-			// 初始化推理结构
+			// 初始化LBPInference  循环置信传播算法的基本实现
 			CLISTDEFIDX(LBPInference,FIndex) inferences(nComponents);
 			{
 				FOREACH(s, sizes) {
@@ -1903,7 +1907,7 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		ASSERT(imageData.image.isInside(texturePatch.rect.tl()));
 		ASSERT(imageData.image.isInside(texturePatch.rect.br()));
 
-		const TexCoord offset(texturePatch.rect.tl());	// ???
+		const TexCoord offset(texturePatch.rect.tl());	// top left
 		FOREACHPTR(pIdxFace, texturePatch.faces) {
 			const FIndex idxFace(*pIdxFace);
 			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
