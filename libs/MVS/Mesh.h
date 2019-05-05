@@ -220,6 +220,7 @@ struct TRasterMesh {
 			if (!static_cast<DERIVED*>(this)->ProjectVertex(vertices[facet[v]], v))
 				return;
 		}
+
 		// 计算面中心，这也是面向量的视图（因为面在相机视图空间中）
 		const Point3 faceCenter((ptc[0]+ptc[1]+ptc[2])/3);
 		// 如果到面矢量的视图与视图方向之间的（cos）角度为负，则跳过面
