@@ -403,8 +403,8 @@ public:
 	// used to compute the seam leveling
 	PairIdxArr seamEdges; // 连接不同纹理贴图的（面-面）边缘
 	Mesh::FaceIdxArr components; // 对于每个面，存储对应的纹理块索引
-	IndexArr mapIdxPatch; // remap texture patch indices after invalid patches removal
-	SeamVertices seamVertices; // array of vertices on the border between two or more patches
+	IndexArr mapIdxPatch; // 无效补丁删除后重新映射纹理补丁索引
+	SeamVertices seamVertices; // 两个或多个修补程序之间边界上的顶点数组
 
 	//始终有效
 	Mesh::VertexFacesArr& vertexFaces; // 对于每个顶点，包含它的面的列表
@@ -879,6 +879,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 					if (idxFace >= idxFaceAdj)
 						continue;
 
+					// 数据项在进行图像一致性检查时删除了一些不符合条件的网格数据项
 					const bool bInvisibleFace(facesDatas[idxFace].IsEmpty());   // 数据项是否为空
 					const bool bInvisibleFaceAdj(facesDatas[idxFaceAdj].IsEmpty()); // 数据项是否为空
 
@@ -910,12 +911,12 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			sizes.Memset(0);
 			FOREACH(c, components)
 				nodeIDs[c] = sizes[components[c]]++;
-//			FOREACH(c, components)
-//            {
-//			    cout << components[c] << endl;
-//                //cout << sizes[components[c]] << endl;
-//                //cout << nodeIDs[c] << endl;
-//            }
+			FOREACH(c, components)
+            {
+			    cout << components[c] << endl;
+                cout << sizes[components[c]] << endl;
+                cout << nodeIDs[c] << endl;
+            }
 
 
 			// 归一化质量值
@@ -1188,7 +1189,7 @@ void MeshTexture::CreateSeamVertices()
 
 	FOREACHPTR(pEdge, seamEdges) {
 		// 存储边缘，用于以后的接缝优化
-		ASSERT(pEdge->i < pEdge->j);
+		ASSERT(pEdge->i < pEdge->j);    // pEdge->i 对应的网格索引 pEdge->j 对应的网格索引
 		const uint32_t idxPatch0(mapIdxPatch[components[pEdge->i]]);	// 某个联通分量的x方向对应的块
 		const uint32_t idxPatch1(mapIdxPatch[components[pEdge->j]]);	// 某个联通分量的y方向对应的块
 		ASSERT(idxPatch0 != idxPatch1 || idxPatch0 == numPatches);
@@ -1226,6 +1227,7 @@ void MeshTexture::CreateSeamVertices()
 			patch10.edges.AddConstruct(itSeamVertex0.first->second).idxFace = pEdge->i;
 			patch10.proj = faceTexcoords[pEdge->i*3+vs0[1]]+offset0;
 		}
+
 		if (idxPatch1 < numPatches) {
 			const TexCoord offset1(texturePatches[idxPatch1].rect.tl());	// top left
 			SeamVertex::Patch& patch01 = seamVertex0.GetPatch(idxPatch1);
@@ -1258,6 +1260,7 @@ void MeshTexture::GlobalSeamLeveling()
 		for (int v=0; v<3; ++v)
 			patchIndices[face[v]].idxPatch = idxPatch;	// 该面的3个顶点赋值
 	}
+
 	// 标记缝隙顶点
 	FOREACH(i, seamVertices) {
 		const SeamVertex& seamVertex = seamVertices[i];
@@ -1275,7 +1278,7 @@ void MeshTexture::GlobalSeamLeveling()
 	cList<VertexPatch2RowMap> vertpatch2rows(vertices.GetSize());
 
 	FOREACH(i, vertices) {
-		const PatchIndex& patchIndex = patchIndices[i];	// 顶点对应的块
+		const PatchIndex& patchIndex = patchIndices[i];	// 缝隙顶点对应的块
 		VertexPatch2RowMap& vertpatch2row = vertpatch2rows[i];
 
 		if (patchIndex.bIndex) {	// 缝隙
@@ -1333,13 +1336,13 @@ void MeshTexture::GlobalSeamLeveling()
 		}
 	}
     ASSERT(rows.GetSize()/2 < static_cast<IDX>(std::numeric_limits<MatIdx>::max()));
-	cout << rowsGamma << endl;
+	// cout << rowsGamma << endl;
 
 	SparseMat Gamma(rowsGamma, rowsX);	// 稀疏矩阵  Gamma  稀疏矩阵 元素为 +/- 1
 	Gamma.setFromTriplets(rows.Begin(), rows.End());
 	rows.Empty();
 
-	// 填充线性方程组的矩阵A和向量B的系数
+	// 填充线性方程组的矩阵A和向量B的系数   Ax = b  泊松编辑
 	IndexArr indices;
 	Colors vertexColors;
 	Colors coeffB;
@@ -1772,6 +1775,7 @@ void MeshTexture::LocalSeamLeveling()
 	#endif
 		const uint32_t idxPatch((uint32_t)i);
 		TexturePatch& texturePatch = texturePatches[idxPatch];
+
 		// 提取图像   label 视图索引
 		const Image8U3& image0(images[texturePatch.label].image);
 		Image32F3 image, imageOrg;
@@ -1893,6 +1897,7 @@ void MeshTexture::LocalSeamLeveling()
 // 用于未被任何图像覆盖的面部的颜色 colEmpty 0x00FF7F27 r 255 g 127 b 39
 void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLeveling, unsigned nTextureSizeMultiple, unsigned nRectPackingHeuristic, Pixel8U colEmpty)
 {
+    // 不管图像多大，如果我们已经知道图片最外一圈的像素值(约束条件)，以及其它像素点的散度值，我们就能把这个方程给列出来，构建泊松方程，重建图像。
 	// 在相应视图中投射补丁并计算纹理坐标和边界框
 	const int border(2);
 	faceTexcoords.Resize(faces.GetSize()*3);    // 面纹理坐标	 每个面有3个顶点
@@ -1927,18 +1932,19 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 		ASSERT(imageData.image.isInside(Point2f(aabb.ptMin)));
 		ASSERT(imageData.image.isInside(Point2f(aabb.ptMax)));
 
-		texturePatch.rect.x = FLOOR2INT(aabb.ptMin[0])-border;
-		texturePatch.rect.y = FLOOR2INT(aabb.ptMin[1])-border;
+		texturePatch.rect.x = FLOOR2INT(aabb.ptMin[0])-border;  // 边框x
+		texturePatch.rect.y = FLOOR2INT(aabb.ptMin[1])-border;  // 边框y
 
-		texturePatch.rect.width = CEIL2INT(aabb.ptMax[0]-aabb.ptMin[0])+border*2;
-		texturePatch.rect.height = CEIL2INT(aabb.ptMax[1]-aabb.ptMin[1])+border*2;
+		texturePatch.rect.width = CEIL2INT(aabb.ptMax[0]-aabb.ptMin[0])+border*2;   // width
+		texturePatch.rect.height = CEIL2INT(aabb.ptMax[1]-aabb.ptMin[1])+border*2;  // height
 		ASSERT(imageData.image.isInside(texturePatch.rect.tl()));
 		ASSERT(imageData.image.isInside(texturePatch.rect.br()));
 
 		const TexCoord offset(texturePatch.rect.tl());	// top left
-		FOREACHPTR(pIdxFace, texturePatch.faces) {
+
+		FOREACHPTR(pIdxFace, texturePatch.faces) {	// 一个纹理快包含多个网格
 			const FIndex idxFace(*pIdxFace);
-			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
+			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;	// 网格有3个顶点
 			for (int v=0; v<3; ++v)
 				texcoords[v] -= offset;
 		}
@@ -1946,13 +1952,14 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 	{
 		// 初始化最后一个补丁指向一个小的统一颜色补丁
 		TexturePatch& texturePatch = texturePatches.Last();
-		const int sizePatch(border*2+1);
+		const int sizePatch(border*2+1);	// 5
 		texturePatch.rect = cv::Rect(0,0, sizePatch,sizePatch);
+
 		FOREACHPTR(pIdxFace, texturePatch.faces) {
 			const FIndex idxFace(*pIdxFace);
 			TexCoord* texcoords = faceTexcoords.Begin()+idxFace*3;
 			for (int i=0; i<3; ++i)
-				texcoords[i] = TexCoord(0.5f, 0.5f);
+				texcoords[i] = TexCoord(0.5f, 0.5f);	// 坐标为 1 / 2
 		}
 	}
 
@@ -1994,7 +2001,7 @@ void MeshTexture::GenerateTexture(bool bGlobalSeamLeveling, bool bLocalSeamLevel
 				continue;
 
 			// 平移纹理坐标
-			const TexCoord offset(texturePatchSmall.rect.tl()-texturePatchBig.rect.tl());	// 坐标便宜
+			const TexCoord offset(texturePatchSmall.rect.tl()-texturePatchBig.rect.tl());	// 坐标偏移
 			// 存在重合 进行合并
 			FOREACHPTR(pIdxFace, texturePatchSmall.faces) {
 				const FIndex idxFace(*pIdxFace);
