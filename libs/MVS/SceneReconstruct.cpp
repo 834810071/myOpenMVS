@@ -508,7 +508,7 @@ int intersect(const triangle_t& t, const segment_t& s, int coplanar[3])
 bool intersect(const delaunay_t& Tr, const segment_t& seg, const std::vector<facet_t>& in_facets, std::vector<facet_t>& out_facets, intersection_t& inter)
 {
 	ASSERT(!in_facets.empty());
-	static const int facet_vertex_order[] = {2,1,3,2,2,3,0,2,0,3,1,0,0,1,2,0};  // ???
+	static const int facet_vertex_order[] = {2,1,3,2,2,3,0,2,0,3,1,0,0,1,2,0};
 	int coplanar[3];    // 共面
 	const REAL prevDist(inter.dist);    // 点p 向外距离为1
 	for (const facet_t& in_facet: in_facets) {
@@ -949,7 +949,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
         }
 
         const float sigma(SQRT(distsSq.GetMedian()) * kSigma);    // sigma常量  等于边长中位数 代表最小可重建对象  论文
-        const float inv2SigmaSq(0.5f / (sigma * sigma));    // 1 / (2 * sigma * sigma)
+        const float inv2SigmaSq(0.5f / (sigma * sigma));    // 1 / (2 * sigma * sigma)  距离加权使用
         distsSq.Release();
 
         std::vector<facet_t> facets;
@@ -961,7 +961,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
 #ifdef DELAUNAY_USE_OPENMP
             delaunay_t::Vertex_iterator vertexIter(delaunay.vertices_begin());  // 迭代器  顶点
             const int64_t nVerts(delaunay.number_of_vertices() + 1);
-            // 遍历顶点
+            // 遍历顶点  即四面体
 #pragma omp parallel for private(facets)
             for (int64_t i = 0; i < nVerts; ++i) {
                 delaunay_t::Vertex_iterator vi;
@@ -979,7 +979,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                 const point_t &p(vi->point());
                 const Point3 pt(CGAL2MVS<REAL>(p)); // point
 
-                // 顶点对应的视图
+                // 顶点(四面体)对应的视图
                 FOREACH(v, vert.views) {    //
                     const typename vert_info_t::view_t view(vert.views[v]);
                     const uint32_t imageID(view.idxView);   // 视图索引
@@ -1052,7 +1052,7 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                         // 分配分数，按点到交叉点的距离加权
                         const facet_t &mf(delaunay.mirror_facet(inter.facet));  // 返回从另一个相邻单元格看到的相同面 即 图中的边赋值
                         const edge_cap_t w(
-                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq)));    //　论文24 page6
+                                alpha_vis * (1.f - EXP(-SQUARE((float) inter.dist) * inv2SigmaSq)));    //　论文24 page6  权重设置
                         edge_cap_t &f(infoCells[mf.first->info()].f[mf.second]);
 #ifdef DELAUNAY_USE_OPENMP
 #pragma omp atomic
@@ -1090,8 +1090,9 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                 const cell_info_t &ciInfo(infoCells[ciID]);
                 graph.AddNode(ciID, ciInfo.s, ciInfo.t);    // 添加源点 汇点
 
+                // 四面体的四个面对权重进行赋值
                 for (int i = 0; i < 4; ++i) {
-                    const cell_handle_t cj(ci->neighbor(i));
+                    const cell_handle_t cj(ci->neighbor(i));   // 邻近四面体（顶点）
                     const cell_size_t cjID(cj->info());
                     if (cjID < ciID) continue;
                     const cell_info_t &cjInfo(infoCells[cjID]);
@@ -1099,13 +1100,15 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
                      // 计算包含给定平面与单元的外接球面之间的角度  论文24 page7
                     const edge_cap_t q((1.f - MINF(computePlaneSphereAngle(delaunay, facet_t(ci, i)),
                                                    computePlaneSphereAngle(delaunay, facet_t(cj, j)))) * kQual);
-                    graph.AddEdge(ciID, cjID, ciInfo.f[i] + q, cjInfo.f[j] + q);    // 添加边
+                    graph.AddEdge(ciID, cjID, ciInfo.f[i] + q, cjInfo.f[j] + q);    // 数据项  + 平滑项
                 }
             }
             infoCells.clear();
 
-            // 查找Graph-cut解决方案  todo
+            // 查找Graph-cut解决方案
             const float maxflow(graph.ComputeMaxFlow());    // 论文24  2
+
+            // 提取分割面---------------------------------------------------
 
             // 提取内部/外部单元格之间的小平面形成的表面
             const size_t nEstimatedNumVerts(delaunay.number_of_vertices()); // 顶点个数
@@ -1114,9 +1117,9 @@ bool Scene::ReconstructMesh(float distInsert, unsigned nItersFixNonManifold,    
             mapVertices.reserve(nEstimatedNumVerts);
 #endif
             mesh.vertices.Reserve((Mesh::VIndex) nEstimatedNumVerts);
-            mesh.faces.Reserve((Mesh::FIndex) nEstimatedNumVerts * 2); // 面是顶点的2倍 ?
+            mesh.faces.Reserve((Mesh::FIndex) nEstimatedNumVerts * 2); // 面是顶点的2倍
 
-            // 遍历网格  todo
+            // 遍历网格   当节点类型不一致的时候  则添加该边（三角行网格）
             for (delaunay_t::All_cells_iterator ci = delaunay.all_cells_begin(), ce = delaunay.all_cells_end();
                  ci != ce; ++ci) {
                 const cell_size_t ciID(ci->info());
