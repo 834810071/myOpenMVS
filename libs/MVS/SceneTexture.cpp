@@ -911,12 +911,12 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			sizes.Memset(0);
 			FOREACH(c, components)
 				nodeIDs[c] = sizes[components[c]]++;
-			FOREACH(c, components)
-            {
-			    cout << components[c] << endl;
-                cout << sizes[components[c]] << endl;
-                cout << nodeIDs[c] << endl;
-            }
+//			FOREACH(c, components)
+//            {
+//			    cout << components[c] << endl;
+//                cout << sizes[components[c]] << endl;
+//                cout << nodeIDs[c] << endl;
+//            }
 
 
 			// 归一化质量值
