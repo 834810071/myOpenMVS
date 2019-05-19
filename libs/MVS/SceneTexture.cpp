@@ -873,7 +873,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			// 共用边是边
 			FOREACH(idxFace, faces) {
 			    // 当前面的三个顶点所在的面，如果有重复的则放入afaces  -- adj邻面
-				scene.mesh.GetFaceFaces(idxFace, afaces);   // 三个顶点所在的n个面 不能存在公用边
+				scene.mesh.GetFaceFaces(idxFace, afaces);   // 三个顶点所在的n个面
 				ASSERT(ISINSIDE((int)afaces.GetSize(), 1, 4));	// 1 <=size < 4
 
 				FOREACHPTR(pIdxFace, afaces) {
@@ -890,6 +890,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 							seamEdges.AddConstruct(idxFace, idxFaceAdj);    // 连接不同纹理贴图的（面-面）边缘
 						continue;
 					}
+
 					boost::add_edge(idxFace, idxFaceAdj, graph);	// 两个相邻面都不为空  图中的边是点
 				}
 				afaces.Empty();	// 清空
@@ -909,7 +910,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			// 将面ID从全局空间映射到组件空间
 			typedef cList<NodeID, NodeID, 0, 128, NodeID> NodeIDs;
 			NodeIDs nodeIDs(faces.GetSize());
-			NodeIDs sizes(nComponents);
+			NodeIDs sizes(nComponents);     // 每个联通数量的大小
 			sizes.Memset(0);
 			FOREACH(c, components)
 				nodeIDs[c] = sizes[components[c]]++;
@@ -945,10 +946,12 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 
 			#if TEXOPT_INFERENCE == TEXOPT_INFERENCE_LBP
 			// 进行平滑项设置
-			// 初始化LBPInference  循环置信传播算法的基本实现  会随着变化而变化
+			// 初始化LBPInference  循环置信传播算法的基本实现  会随着变化而变化  每一个结点的标记即为最优标记，MRF也达到了收敛状态
 			// https://github.com/nmoehrle/mvs-texturing
-			CLISTDEFIDX(LBPInference,FIndex) inferences(nComponents);
+			CLISTDEFIDX(LBPInference,FIndex) inferences(nComponents);   // 以联通图为单位
 			{
+
+			    // 置信中添加节点
 				FOREACH(s, sizes) { // sizes 联通图数量
 					const NodeID numNodes(sizes[s]);    // 某一分量的数量
 					ASSERT(numNodes > 0);
@@ -969,7 +972,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 						ASSERT(f == (FIndex)ei->m_source);
 						const FIndex fAdj((FIndex)ei->m_target);
 						ASSERT(components[f] == components[fAdj]);
-						if (f < fAdj) // 只添加一次边
+						if (f < fAdj) //
 							inference.SetNeighbors(nodeIDs[f], nodeIDs[fAdj]);
 					}
 				}
@@ -979,6 +982,7 @@ bool MeshTexture::FaceViewSelection(float fOutlierThreshold, float fRatioDataSmo
 			{
 			                                            // 0.1 * 1000 = 100
 				const LBPInference::EnergyType MaxEnergy(fRatioDataSmoothness*LBPInference::MaxEnergy);
+
 				// 设置标签0的成本（未定义）  初始化 也就是为没有对应faceData数据的的进行设置
 				FOREACH(s, inferences) {
 					LBPInference& inference = inferences[s];
@@ -1195,13 +1199,13 @@ void MeshTexture::CreateSeamVertices()
 	FOREACHPTR(pEdge, seamEdges) {
 		// 存储边缘，用于以后的接缝优化
 		ASSERT(pEdge->i < pEdge->j);    // pEdge->i 对应的网格索引 pEdge->j 对应的网格索引
-		const uint32_t idxPatch0(mapIdxPatch[components[pEdge->i]]);	// 某个联通分量对应的块
-		const uint32_t idxPatch1(mapIdxPatch[components[pEdge->j]]);	// 某个联通分量对应的块
+		const uint32_t idxPatch0(mapIdxPatch[components[pEdge->i]]);	// 联通分量对应的块
+		const uint32_t idxPatch1(mapIdxPatch[components[pEdge->j]]);	// 联通分量对应的块
 		ASSERT(idxPatch0 != idxPatch1 || idxPatch0 == numPatches);
 		if (idxPatch0 == idxPatch1)
 			continue;
 
-		seamVertices.ReserveExtra(2);
+		seamVertices.ReserveExtra(2);   // 申请空间
 		scene.mesh.GetEdgeVertices(pEdge->i, pEdge->j, vs0, vs1);	// 获取边在图片中的顶点
 		ASSERT(faces[pEdge->i][vs0[0]] == faces[pEdge->j][vs1[0]]);
 		ASSERT(faces[pEdge->i][vs0[1]] == faces[pEdge->j][vs1[1]]);
@@ -1209,20 +1213,20 @@ void MeshTexture::CreateSeamVertices()
 		vs[0] = faces[pEdge->i][vs0[0]];    // 顶点
 		vs[1] = faces[pEdge->i][vs0[1]];
 
-		const auto itSeamVertex0(mapVertexSeam.emplace(std::make_pair(vs[0], seamVertices.GetSize())));
+		const auto itSeamVertex0(mapVertexSeam.emplace(std::make_pair(vs[0], seamVertices.GetSize()))); // 第一个顶点
 		if (itSeamVertex0.second)
 			seamVertices.AddConstruct(vs[0]);
 		SeamVertex& seamVertex0 = seamVertices[itSeamVertex0.first->second];
 
-		const auto itSeamVertex1(mapVertexSeam.emplace(std::make_pair(vs[1], seamVertices.GetSize())));
+		const auto itSeamVertex1(mapVertexSeam.emplace(std::make_pair(vs[1], seamVertices.GetSize()))); // 第二个顶点
 		if (itSeamVertex1.second)
 			seamVertices.AddConstruct(vs[1]);
 		SeamVertex& seamVertex1 = seamVertices[itSeamVertex1.first->second];
 
 		if (idxPatch0 < numPatches) {
 			const TexCoord offset0(texturePatches[idxPatch0].rect.tl());	// top left
-			SeamVertex::Patch& patch00 = seamVertex0.GetPatch(idxPatch0);
-			SeamVertex::Patch& patch10 = seamVertex1.GetPatch(idxPatch0);
+			SeamVertex::Patch& patch00 = seamVertex0.GetPatch(idxPatch0);   // 缝隙在第一个块
+			SeamVertex::Patch& patch10 = seamVertex1.GetPatch(idxPatch0);   // 缝隙在第二个块
 
 			ASSERT(patch00.edges.Find(itSeamVertex1.first->second) == NO_ID);
 			patch00.edges.AddConstruct(itSeamVertex1.first->second).idxFace = pEdge->i;
@@ -1287,14 +1291,14 @@ void MeshTexture::GlobalSeamLeveling()
 		VertexPatch2RowMap& vertpatch2row = vertpatch2rows[i];
 
 		if (patchIndex.bIndex) {	// 缝隙
-			// 顶点是多个布丁块的一部分  缝隙
+			// 顶点是多个补丁块的一部分  缝隙
 			const SeamVertex& seamVertex = seamVertices[patchIndex.idxSeamVertex];
 			ASSERT(seamVertex.idxVertex == i);
 
 			FOREACHPTR(pPatch, seamVertex.patches) {
 				ASSERT(pPatch->idxPatch != numPatches);
 
-				vertpatch2row[pPatch->idxPatch] = rowsX++;
+				vertpatch2row[pPatch->idxPatch] = rowsX++;  // 行计数
 			}
 		} else
 		if (patchIndex.idxPatch < numPatches) {
@@ -1313,7 +1317,7 @@ void MeshTexture::GlobalSeamLeveling()
 		adjVerts.Empty();
 		scene.mesh.GetAdjVertices(v, adjVerts);	// 获取顶点v的相邻顶点
 
-		VertexPatchIterator itV(patchIndices[v], seamVertices);
+		VertexPatchIterator itV(patchIndices[v], seamVertices); // 顶点块迭代器
 		while (itV.Next()) {
 			const uint32_t idxPatch(itV);
 			if (idxPatch == numPatches)
@@ -1326,7 +1330,8 @@ void MeshTexture::GlobalSeamLeveling()
 				if (v >= vAdj)
 					continue;
 
-				VertexPatchIterator itVAdj(patchIndices[vAdj], seamVertices);
+				VertexPatchIterator itVAdj(patchIndices[vAdj], seamVertices);   // 临近顶点迭代器
+
 				while (itVAdj.Next()) {
 					const uint32_t idxPatchAdj(itVAdj);
 
@@ -1343,11 +1348,11 @@ void MeshTexture::GlobalSeamLeveling()
     ASSERT(rows.GetSize()/2 < static_cast<IDX>(std::numeric_limits<MatIdx>::max()));
 	// cout << rowsGamma << endl;
 
-	SparseMat Gamma(rowsGamma, rowsX);	// 稀疏矩阵  Gamma  稀疏矩阵 元素为 +/- 1
+	SparseMat Gamma(rowsGamma, rowsX);	// 稀疏矩阵  Gamma  稀疏矩阵 元素为 +/- 0.1
 	Gamma.setFromTriplets(rows.Begin(), rows.End());
 	rows.Empty();
 
-	// 填充线性方程组的矩阵A和向量B的系数   Ax = b  泊松编辑
+	// 填充线性方程组的矩阵A和向量B的系数   Ax = b
 	IndexArr indices;
 	Colors vertexColors;
 	Colors coeffB;
@@ -1360,11 +1365,12 @@ void MeshTexture::GlobalSeamLeveling()
 		seamVertex.SortByPatchIndex(indices);	// sort
 		vertexColors.Resize(indices.GetSize());
 
-		FOREACH(i, indices) {	// 按照所以遍历
+		FOREACH(i, indices) {	// 按照块索引遍历
 			const SeamVertex::Patch& patch0 = seamVertex.patches[indices[i]];
 			ASSERT(patch0.idxPatch < numPatches);
 
 			SampleImage sampler(images[texturePatches[patch0.idxPatch].label].image);
+
 			FOREACHPTR(pEdge, patch0.edges) {
 				const SeamVertex& seamVertex1 = seamVertices[pEdge->idxSeamVertex];
 				const SeamVertex::Patches::IDX idxPatch1(seamVertex1.patches.Find(patch0.idxPatch));
@@ -1426,7 +1432,7 @@ void MeshTexture::GlobalSeamLeveling()
 		for (int channel=0; channel<3; ++channel) {
 			//初始化右边向量
 			const Eigen::Map< Eigen::VectorXf, Eigen::Unaligned, Eigen::Stride<0,3> > b(coeffB.Begin()->ptr()+channel, rowsA);
-			const Eigen::VectorXf Rhs(SparseMat(A.transpose()) * b);	//
+			const Eigen::VectorXf Rhs(SparseMat(A.transpose()) * b);	// rou
 			// 求解 x
 			const Eigen::VectorXf x(solver.solve(Rhs));
 			ASSERT(solver.info() == Eigen::Success);
