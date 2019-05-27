@@ -2371,7 +2371,7 @@ static void ComputeConnectedComponents(Polyhedron& p, std::vector<MeshConnectedC
 	for (Facet_iterator i = p.facets_begin(); i != p.facets_end(); ++i)
 		i->removal_status = 'U';
 
-	std::cout << "Connected components of: ";
+	// std::cout << "Connected components of: ";
 	// traverse the mesh via facets
 	for (Facet_iterator i = p.facets_begin(); i != p.facets_end(); ++i) {
 		if (i->removal_status=='U') { // start a new component
@@ -2398,10 +2398,10 @@ static void ComputeConnectedComponents(Polyhedron& p, std::vector<MeshConnectedC
 			} // done traversing the current component
 			lastComponent.edge_avg/=lastComponent.size*3;
 			connected_components.push_back(lastComponent);
-			std::cout << lastComponent.size << " faces ";
+			//std::cout << lastComponent.size << " faces ";
 		} // found a new component
 	} // done traversing the mesh
-	std::cout << "(" << connected_components.size() << " components)" << std::endl;
+	//std::cout << "(" << connected_components.size() << " components)" << std::endl;
 }
 static void RemoveConnectedComponents(Polyhedron& p, int size_threshold, float edge_threshold)
 {
